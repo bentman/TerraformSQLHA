@@ -261,3 +261,13 @@ resource "time_sleep" "sqlha_final_wait" {
     azurerm_virtual_machine_extension.add_sqlsysadmins_exec,
   ]
 }
+
+########## OUTPUT EXAMPLES ##########
+output "vm_sqlha" {
+  value = {
+    for i in range(length(azurerm_windows_virtual_machine.sqlha_vm)) : i => {
+      pip  = azurerm_public_ip.sqlha_public_ip[i].ip_address
+      name = azurerm_windows_virtual_machine.sqlha_vm[i].computer_name
+    }
+  }
+}

@@ -95,18 +95,6 @@ resource "azurerm_virtual_network_peering" "peering2" {
 }
 
 ########## OUTPUT EXAMPLES ##########
-output "vnet_ids" {
-  value = [for vnet in azurerm_virtual_network.vnet : vnet.id]
-}
-
-output "subnet_ids" {
-  value = [for subnet in azurerm_subnet.snet_addc : subnet.id]
-}
-
-output "nat_gateway_ids" {
-  value = [for nat in azurerm_nat_gateway.nat_gateway : nat.id]
-}
-
-output "peering_ids" {
-  value = [azurerm_virtual_network_peering.peering1.id, azurerm_virtual_network_peering.peering2.id]
+output "network_subnet_prefixes" {
+  value = [for subnet in azurerm_subnet.snet_addc : subnet.address_prefixes]
 }

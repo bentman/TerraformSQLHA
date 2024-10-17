@@ -239,3 +239,13 @@ resource "null_resource" "add_sqlacl_copy" {
     azurerm_virtual_machine_extension.add_domain_accounts_exec,
   ]
 }
+
+########## OUTPUT EXAMPLES ##########
+output "vm_addc" {
+  value = {
+    for i in range(length(azurerm_windows_virtual_machine.addc_vm)) : i => {
+      pip  = azurerm_public_ip.addc_public_ip[i].ip_address
+      name = azurerm_windows_virtual_machine.addc_vm[i].computer_name
+    }
+  }
+}

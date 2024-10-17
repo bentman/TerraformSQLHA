@@ -46,3 +46,12 @@ resource "azurerm_lb_backend_address_pool" "sqlha_backend_pool" {
   name            = "${var.shortregions[count.index]}-sqlha-backend-pool"
   loadbalancer_id = azurerm_lb.sqlha_lb[count.index].id
 }
+
+########## OUTPUT EXAMPLES ##########
+output "sqlha_lb" {
+  value = {
+    for i in range(length(azurerm_lb.sqlha_lb)) : i => {
+      name = azurerm_lb.sqlha_lb[i].name
+    }
+  }
+}

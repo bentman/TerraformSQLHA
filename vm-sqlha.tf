@@ -129,3 +129,12 @@ resource "time_sleep" "sqlha_sqlacl_wait" {
     null_resource.add_sql_acl_clusters,
   ]
 }
+
+########## OUTPUT EXAMPLES ##########
+output "sqlha_vmg" {
+  value = {
+    for i in range(length(azurerm_mssql_virtual_machine_group.sqlha_vmg)) : i => {
+      name = azurerm_mssql_virtual_machine_group.sqlha_vmg[i].name
+    }
+  }
+}

@@ -21,3 +21,12 @@ resource "azurerm_storage_container" "sqlha_quorum" {
   storage_account_name  = azurerm_storage_account.sqlha_witness[count.index].name
   container_access_type = "private"
 }
+
+########## OUTPUT EXAMPLES ##########
+output "sqlha_witness" {
+  value = {
+    for i in range(length(azurerm_storage_account.sqlha_witness)) : i => {
+      name = azurerm_storage_account.sqlha_witness[i].name
+    }
+  }
+}
