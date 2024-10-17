@@ -6,7 +6,7 @@ This repository contains Terraform configurations to create a virtual network se
 
 The Terraform configuration defines the following Azure networking components across two regions:
 
-1. **Virtual Networks**: Two virtual networks (`vnet`) are created, each in a different Azure region. Each network has its own address space specified by `var.address_spaces`.
+1. **Virtual Networks**: Two virtual networks (`vnet`) are created, each in a different Azure region.
 
 2. **Subnets**: Each virtual network contains the following subnets:
    - **Gateway Subnet (`snet_gw`)**: Used for the VPN gateway.
