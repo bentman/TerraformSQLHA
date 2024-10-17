@@ -8,7 +8,7 @@ The lab environment includes the following features:
 
 - A single resource group to host all resources
 - Infrastructure provisioned across two Azure regions
-- Virtual Network setup with multiple subnets for gateways, domain controllers, applications, databases, and clients
+- Virtual Network setup with multiple subnets (gateways, domain controllers, applications, databases, & clients)
 - Two Active Directory Domain Controllers (one per region)
 - SQLHA with Always On Availability Groups configured in each regions
 - Load Balancers for SQLHA listener configured for 'SingleSubnet'
