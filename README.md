@@ -16,34 +16,34 @@ The lab environment includes the following features:
 
 ## Components
 
-1. **Resource Group**: A single Azure resource group to host all resources.
+1. **Resource Group**: A single Azure resource group to host all resources
 
-2. **Networking**: Virtual networks and subnets across two regions, including peering, NAT gateways, and route tables.
+2. **Networking**: vNets & subnets in two regions, includes peering, NAT gateways, and route tables
 
-3. **Active Directory**: Two domain controllers (one in each region) configured using custom scripts to promote and synchronize domains.
+3. **Active Directory**: Domain Controller in each region configured from scripts to promote and synchronize domain
 
 4. **SQL High Availability (Ready for Disaster Recovery Scenarios)**
-   - SQL HA clusters/AG are set up in a 'SingleSubnet' configuration using a load balancer.
-   - SQL Virtual Machines are configured with Always On Availability Groups.
-   - Load balancers are set up to manage SQLHA listener traffic.
-   - SQL Virtual Machine Groups and WSFC Domain Profiles are configured for HA setup.
+   - SQL HA clusters/AG are set up in a 'SingleSubnet' configuration using a load balancer
+   - SQL Virtual Machines are configured with Always On Availability Groups
+   - Load balancers are set up to manage SQLHA listener traffic
+   - SQL Virtual Machine Groups and WSFC Domain Profiles are configured for HA setup
 
 ## Project Structure
 
-- **tfvars file**: Contains the secret values for authentication (not included in the repository; keep it secure).
-- **providers.tf**: Specifies the required Terraform and provider versions.
-- **v-network.tf**: Virtual Network and subnet configurations for both regions.
-- **main.tf**: Main Terraform configuration file containing all resources for the Azure lab environment.
-- **variables.tf**: Contains all variables used throughout the Terraform configuration, including sensitive information placeholders.
-- **scripts**: PowerShell scripts for setting up domain controllers, configuring clusters, and setting up SQL permissions.
+- **tfvars file**: Contains the secret values for authentication (example, keep yours secure!)
+- **providers.tf**: Specifies the required Terraform and provider versions
+- **v-network.tf**: Virtual Network and subnet configurations for both regions
+- **main.tf**: Main Terraform configuration file containing all resources for the Azure lab environment
+- **variables.tf**: Contains all variables used throughout the Terraform configuration, including sensitive information placeholders
+- **scripts**: PowerShell scripts for setting up domain controllers, configuring clusters, and setting up SQL permissions
 
 ## Important Notes
 
 - **Lab Environment**: This setup is intended as a lab environment for learning/testing scenarios
-- **Single Resource Group**: All resources are placed in a single resource group for simplicity.
-- **Security Considerations**: Public IPs for SSH, default passwords, etc. should not be used in production.
-- **Sensitive Data**: Ensure your `terraform.tfvars` file is not committed to the repository to keep secrets safe.
-- **.gitignore**: Use the included `.gitignore` file to manage `commit` and `push`.
+- **Single Resource Group**: All resources are placed in a single resource group for simplicity
+- **Security Considerations**: Public IPs for SSH, default passwords, etc. should not be used in production
+- **Sensitive Data**: Ensure your `terraform.tfvars` file is not committed to the repository to keep secrets safe
+- **.gitignore**: Use the included `.gitignore` file to manage `commit` & `push`
 
 ## Prerequisites
 
