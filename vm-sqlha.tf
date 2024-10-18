@@ -15,7 +15,7 @@ resource "azurerm_network_interface_backend_address_pool_association" "sqlha_nic
 ########## CREATE SQL VIRTUAL MACHINE GROUPS FOR SQLHA ##########
 resource "azurerm_mssql_virtual_machine_group" "sqlha_vmg" {
   count               = length(var.regions)
-  name                = "${var.shortregions[count.index]}-sqlha-vmg"
+  name                = "${var.shortregions[count.index]}-sqlhavmg"
   location            = var.regions[count.index]
   resource_group_name = azurerm_resource_group.rg.name
   sql_image_offer     = var.sql_image_offer
