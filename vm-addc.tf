@@ -50,7 +50,7 @@ resource "azurerm_windows_virtual_machine" "addc_vm" {
     version   = "latest"
   }
   winrm_listener {
-    protocol = "Https"
+    protocol = "Http"
   }
   identity {
     type = "SystemAssigned"
@@ -160,6 +160,9 @@ resource "azurerm_virtual_machine_extension" "setup_domain_controller_exec" {
       "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Install-AdDomainController.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -safemode_admin_pswd ${var.safemode_admin_pswd}"
     }
   SETTINGS
+  depends_on = [
+    null_resource.setup_domain_controller_copy,
+  ]
 }
 
 # Restart the second Active Directory Domain Controller VM after promotion
@@ -243,3 +246,4 @@ output "vm_addc" {
     }
   }
 }
+

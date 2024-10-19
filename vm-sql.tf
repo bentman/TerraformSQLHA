@@ -80,9 +80,10 @@ resource "azurerm_virtual_machine_extension" "install_openssh" {
   ]
 }
 
-# File provisioner for SQL scripts
-resource "null_resource" "sql_script_copy" {
+# Copy Add-SqlSysAdmins.ps1 script
+resource "null_resource" "sql_sysadmin_script_copy" {
   count = length(azurerm_windows_virtual_machine.sqlha_vm)
+
   provisioner "file" {
     source      = "${path.module}/Add-SqlSysAdmins.ps1"
     destination = "C:\\Add-SqlSysAdmins.ps1"
@@ -95,6 +96,16 @@ resource "null_resource" "sql_script_copy" {
       timeout         = "3m"
     }
   }
+
+  depends_on = [
+    azurerm_virtual_machine_extension.install_openssh,
+  ]
+}
+
+# Copy Add-SqlLocalAdmins.ps1 script
+resource "null_resource" "sql_localadmin_script_copy" {
+  count = length(azurerm_windows_virtual_machine.sqlha_vm)
+
   provisioner "file" {
     source      = "${path.module}/Add-SqlLocalAdmins.ps1"
     destination = "C:\\Add-SqlLocalAdmins.ps1"
@@ -107,6 +118,7 @@ resource "null_resource" "sql_script_copy" {
       timeout         = "3m"
     }
   }
+
   depends_on = [
     azurerm_virtual_machine_extension.install_openssh,
   ]
@@ -186,20 +198,23 @@ resource "azurerm_virtual_machine_extension" "sqlha_domainjoin" {
   ]
 }
 
-# Restart the second Active Directory Domain Controller VM after promotion
+# Restart SQL VMs after domain join
 resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
+  count              = length(var.regions) * 2
   name               = "RestartCommand"
-  location           = var.regions[1]
-  virtual_machine_id = azurerm_windows_virtual_machine.addc_vm[1].id
+  location           = var.regions[floor(count.index / 2)]
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[count.index].id # Target SQL VMs instead of DC
+
   source {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
+
   depends_on = [
     azurerm_virtual_machine_extension.sqlha_domainjoin,
   ]
 }
 
-# Wait for the second VM to restart after domain controller promotion
+# Wait for ALL SQL VMs to restart after domain join
 resource "time_sleep" "sqlha_domainjoin_wait" {
   create_duration = "5m"
   depends_on = [
