@@ -69,10 +69,6 @@ resource "azurerm_virtual_machine_extension" "install_openssh_addc" {
   protected_settings = jsonencode({
     commandToExecute = "powershell.exe -Command Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0; Start-Service sshd; Set-Service -Name sshd -StartupType 'Automatic'"
   })
-
-  timeouts {
-    create = "30m"
-  }
 }
 
 # Copy setup domain script to the first Active Directory Domain Controller VM
@@ -146,7 +142,6 @@ resource "null_resource" "setup_domain_controller_copy" {
     }
   }
   depends_on = [
-    azurerm_virtual_machine_extension.install_openssh[1],
     time_sleep.addc_vm_restart_wait,
   ]
 }
@@ -188,7 +183,23 @@ resource "time_sleep" "addc_vm_restart_wait_second" {
   ]
 }
 
-# Copy setup domain script to the first Active Directory Domain Controller VM
+# Copy Add-SqlAcl.ps1 script to the first Active Directory Domain Controller VM
+resource "null_resource" "add_sqlacl_copy" {
+  provisioner "file" {
+    source      = "${path.module}/Add-SqlAcl.ps1"
+    destination = "c:\\SqlAcl.ps1"
+    connection {
+      type            = "ssh"
+      user            = var.domain_admin_user
+      password        = var.domain_admin_pswd
+      host            = azurerm_public_ip.addc_public_ip[0].ip_address
+      target_platform = "windows"
+      timeout         = "3m"
+    }
+  }
+}
+
+# Copy Add-DomainAccounts.ps1 script to the first Active Directory Domain Controller VM
 resource "null_resource" "add_domain_accounts_copy" {
   provisioner "file" {
     source      = "${path.module}/Add-DomainAccounts.ps1"
@@ -202,9 +213,6 @@ resource "null_resource" "add_domain_accounts_copy" {
       timeout         = "3m"
     }
   }
-  depends_on = [
-    time_sleep.addc_vm_restart_wait_second,
-  ]
 }
 
 # Execute the setup domain script on the first Active Directory Domain Controller VM
@@ -223,25 +231,6 @@ resource "azurerm_virtual_machine_extension" "add_domain_accounts_exec" {
   SETTINGS
   depends_on = [
     null_resource.add_domain_accounts_copy,
-  ]
-}
-
-# Copy setup domain script to the first Active Directory Domain Controller VM
-resource "null_resource" "add_sqlacl_copy" {
-  provisioner "file" {
-    source      = "${path.module}/Add-SqlAcl.ps1"
-    destination = "c:\\SqlAcl.ps1"
-    connection {
-      type            = "ssh"
-      user            = var.domain_admin_user
-      password        = var.domain_admin_pswd
-      host            = azurerm_public_ip.addc_public_ip[0].ip_address
-      target_platform = "windows"
-      timeout         = "3m"
-    }
-  }
-  depends_on = [
-    azurerm_virtual_machine_extension.add_domain_accounts_exec,
   ]
 }
 

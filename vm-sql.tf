@@ -61,9 +61,6 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
     sku       = "Enterprise"
     version   = "latest"
   }
-  depends_on = [
-    azurerm_virtual_machine_extension.add_domain_accounts_exec,
-  ]
 }
 
 # Install OpenSSH on SQLHA Virtual Machines
@@ -184,8 +181,8 @@ resource "azurerm_virtual_machine_extension" "sqlha_domainjoin" {
     Password = var.domain_admin_pswd
   })
   depends_on = [
-    null_resource.sql_script_copy,
-    azurerm_virtual_machine_data_disk_attachment.sqlha_attachments
+    azurerm_virtual_machine_extension.add_domain_accounts_exec,
+    azurerm_virtual_machine_data_disk_attachment.sqlha_attachments,
   ]
 }
 
