@@ -89,9 +89,6 @@ resource "null_resource" "setup_domain_copy" {
       timeout         = "3m"
     }
   }
-  depends_on = [
-    azurerm_virtual_machine_extension.install_openssh_addc,
-  ]
 }
 
 # Execute the setup domain script on the first Active Directory Domain Controller VM
@@ -108,7 +105,9 @@ resource "azurerm_virtual_machine_extension" "setup_domain_exec" {
       "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File c:\\Install-AdDomain.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -safemode_admin_pswd ${var.safemode_admin_pswd}"
     }
   SETTINGS
-  depends_on                 = [null_resource.setup_domain_copy]
+  depends_on = [
+    null_resource.setup_domain_copy,
+  ]
 }
 
 # Restart the first Active Directory Domain Controller VM after domain promotion
@@ -119,13 +118,17 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart" {
   source {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
-  depends_on = [azurerm_virtual_machine_extension.setup_domain_exec]
+  depends_on = [
+    azurerm_virtual_machine_extension.setup_domain_exec,
+  ]
 }
 
 # Wait for the VM to restart after domain promotion
 resource "time_sleep" "addc_vm_restart_wait" {
   create_duration = "5m"
-  depends_on      = [azurerm_virtual_machine_run_command.addc_vm_restart]
+  depends_on = [
+    azurerm_virtual_machine_run_command.addc_vm_restart,
+  ]
 }
 
 # Copy setup domain controller script to the second Active Directory Domain Controller VM
@@ -142,7 +145,10 @@ resource "null_resource" "setup_domain_controller_copy" {
       timeout         = "3m"
     }
   }
-  depends_on = [azurerm_virtual_machine_extension.install_openssh[1], time_sleep.addc_vm_restart_wait]
+  depends_on = [
+    azurerm_virtual_machine_extension.install_openssh[1],
+    time_sleep.addc_vm_restart_wait,
+  ]
 }
 
 # Execute the setup domain controller script on the second Active Directory Domain Controller VM
@@ -159,7 +165,6 @@ resource "azurerm_virtual_machine_extension" "setup_domain_controller_exec" {
       "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Install-AdDomainController.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -safemode_admin_pswd ${var.safemode_admin_pswd}"
     }
   SETTINGS
-  depends_on                 = [null_resource.setup_domain_controller_copy]
 }
 
 # Restart the second Active Directory Domain Controller VM after promotion

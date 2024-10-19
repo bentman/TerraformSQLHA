@@ -46,24 +46,24 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   admin_password        = var.domain_admin_pswd
   size                  = "Standard_D2s_v3"
   tags                  = var.labtags
-
   os_disk {
     name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-os-disk"
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
     disk_size_gb         = 127
   }
-
   identity {
     type = "SystemAssigned"
   }
-
   source_image_reference {
     publisher = "MicrosoftSQLServer"
     offer     = "SQL2019-WS2022"
     sku       = "Enterprise"
     version   = "latest"
   }
+  depends_on = [
+    azurerm_virtual_machine_extension.add_domain_accounts_exec,
+  ]
 }
 
 # Install OpenSSH on SQLHA Virtual Machines
@@ -75,11 +75,9 @@ resource "azurerm_virtual_machine_extension" "install_openssh" {
   type                       = "CustomScriptExtension"
   type_handler_version       = "1.10"
   auto_upgrade_minor_version = true
-
   protected_settings = jsonencode({
     commandToExecute = "powershell.exe -Command Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0; Start-Service sshd; Set-Service -Name sshd -StartupType 'Automatic'"
   })
-
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
   ]
