@@ -1,4 +1,4 @@
-#################### VALUES ####################
+/*#################### VALUES ####################
 ########## SECRET VALUES ##########
 #####  Declare confidential variables here
 #####  Store secret values in *.tfvars file
@@ -24,8 +24,8 @@ labtags = {
 address_spaces = ["10.1.0.0/24", "10.2.0.0/24"] // defaults to '["10.1.0.0/24", "10.2.0.0/24"]'
 
 ########## VM VALUES
-vm_addc_size     = "Standard_D2s_v3"       // vm addc size
-vm_sqlha_size    = "Standard_D2s_v3"       // vm sqlha size
+vm_addc_size     = "Standard_B2s_v2"       // vm addc size
+vm_sqlha_size    = "Standard_D2s_v4"       // vm sqlha size
 vm_shutdown_hhmm = "0000"                  // defaults to "0000"
 vm_shutdown_tz   = "Central Standard Time" // defaults to "Pacific Standard Time"
 
@@ -44,7 +44,7 @@ sql_svc_acct_user   = "svc_mssqlserver" // sql service username
 sql_svc_acct_pswd   = "P@ssword!234"    // sql service password ('P@ssword!234')
 sql_sysadmin_user   = "sqladmin"        // sql sysadmin username ('sysadmin')
 sql_sysadmin_pswd   = "P@ssword!234"    // sql sysadmin password ('P@ssword!234')
-
+*/
 #################### NOTES ####################
 # Instructions for generating a new Service Principal and Secret using PowerShell
 #
