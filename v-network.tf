@@ -119,78 +119,78 @@ resource "azurerm_network_security_group" "nsg_vnet" {
 
 # Allow communication between Virtual Networks for open communication
 resource "azurerm_network_security_rule" "allow_vnet_communication" {
-  for_each                    = azurerm_virtual_network.vnet
-  name                        = "allow-vnet-communication"
-  priority                    = 100
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "*"
-  source_port_range           = "*"
-  destination_port_range      = "*"
-  source_address_prefix       = azurerm_virtual_network.vnet[1 - each.key].address_space[0]
-  destination_address_prefix  = azurerm_virtual_network.vnet[each.key].address_space[0]
-  resource_group_name         = azurerm_resource_group.rg.name
-  network_security_group_name = azurerm_network_security_group.nsg_vnet[each.key].name
+  for_each                        = azurerm_virtual_network.vnet
+  name                            = "allow-vnet-communication"
+  priority                        = 100
+  direction                       = "Inbound"
+  access                          = "Allow"
+  protocol                        = "*"
+  source_port_range               = "*"
+  destination_port_range          = "*"
+  source_address_prefix = "*"
+  destination_address_prefix = "*"
+  resource_group_name             = azurerm_resource_group.rg.name
+  network_security_group_name     = azurerm_network_security_group.nsg_vnet[each.key].name
 }
 
 # Allow RDP access (port 3389) from any source to all Virtual Machines
 resource "azurerm_network_security_rule" "allow_rdp" {
-  for_each                    = azurerm_virtual_network.vnet
-  name                        = "allow-rdp"
-  priority                    = 200
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "Tcp"
-  source_port_range           = "*"
-  destination_port_range      = "3389"
-  source_address_prefix       = "*"
-  destination_address_prefix  = "*"
-  resource_group_name         = azurerm_resource_group.rg.name
-  network_security_group_name = azurerm_network_security_group.nsg_vnet[each.key].name
+  for_each                        = azurerm_virtual_network.vnet
+  name                            = "allow-rdp"
+  priority                        = 200
+  direction                       = "Inbound"
+  access                          = "Allow"
+  protocol                        = "Tcp"
+  source_port_range               = "*"
+  destination_port_range          = "3389"
+  source_address_prefix           = "*"
+  destination_address_prefix      = "*"
+  resource_group_name             = azurerm_resource_group.rg.name
+  network_security_group_name     = azurerm_network_security_group.nsg_vnet[each.key].name
 }
 
 # Allow SSH access (port 22) from any source to all Virtual Machines
 resource "azurerm_network_security_rule" "allow_ssh" {
-  for_each                    = azurerm_virtual_network.vnet
-  name                        = "allow-ssh"
-  priority                    = 300
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "Tcp"
-  source_port_range           = "*"
-  destination_port_range      = "22"
-  source_address_prefix       = "*"
-  destination_address_prefix  = "*"
-  resource_group_name         = azurerm_resource_group.rg.name
-  network_security_group_name = azurerm_network_security_group.nsg_vnet[each.key].name
+  for_each                        = azurerm_virtual_network.vnet
+  name                            = "allow-ssh"
+  priority                        = 300
+  direction                       = "Inbound"
+  access                          = "Allow"
+  protocol                        = "Tcp"
+  source_port_range               = "*"
+  destination_port_range          = "22"
+  source_address_prefix           = "*"
+  destination_address_prefix      = "*"
+  resource_group_name             = azurerm_resource_group.rg.name
+  network_security_group_name     = azurerm_network_security_group.nsg_vnet[each.key].name
 }
 
 #################### ASSOCIATE NETWORK SECURITY GROUP (NSG) WITH SUBNETS ####################
 # Associate NSG with the Active Directory Domain Controllers (ADDC) Subnet
 resource "azurerm_subnet_network_security_group_association" "nsg_association" {
-  for_each                  = azurerm_subnet.snet_addc
-  subnet_id                 = each.value.id
+  for_each             = azurerm_subnet.snet_addc
+  subnet_id            = each.value.id
   network_security_group_id = azurerm_network_security_group.nsg_vnet[each.key].id
 }
 
 # Associate NSG with the Application Subnet
 resource "azurerm_subnet_network_security_group_association" "nsg_association_app" {
-  for_each                  = azurerm_subnet.snet_app
-  subnet_id                 = each.value.id
+  for_each             = azurerm_subnet.snet_app
+  subnet_id            = each.value.id
   network_security_group_id = azurerm_network_security_group.nsg_vnet[each.key].id
 }
 
 # Associate NSG with the Database Subnet
 resource "azurerm_subnet_network_security_group_association" "nsg_association_db" {
-  for_each                  = azurerm_subnet.snet_db
-  subnet_id                 = each.value.id
+  for_each             = azurerm_subnet.snet_db
+  subnet_id            = each.value.id
   network_security_group_id = azurerm_network_security_group.nsg_vnet[each.key].id
 }
 
 # Associate NSG with the Client Subnet
 resource "azurerm_subnet_network_security_group_association" "nsg_association_client" {
-  for_each                  = azurerm_subnet.snet_client
-  subnet_id                 = each.value.id
+  for_each             = azurerm_subnet.snet_client
+  subnet_id            = each.value.id
   network_security_group_id = azurerm_network_security_group.nsg_vnet[each.key].id
 }
 
