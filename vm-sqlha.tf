@@ -76,9 +76,9 @@ resource "azurerm_mssql_virtual_machine" "az_sqlha" {
     }
   }
   timeouts {
-    create = "2h"
-    update = "2h"
-    delete = "2h"
+    create = "1h"
+    update = "1h"
+    delete = "1h"
   }
   depends_on = [
     time_sleep.sqlha_vmg_wait,

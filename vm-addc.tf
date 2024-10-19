@@ -82,7 +82,7 @@ resource "null_resource" "setup_domain_copy" {
       password        = var.domain_admin_pswd
       host            = azurerm_public_ip.addc_public_ip[0].ip_address
       target_platform = "windows"
-      timeout         = "3m"
+      timeout         = "10m"
     }
   }
 }
@@ -121,7 +121,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart" {
 
 # Wait for the VM to restart after domain promotion
 resource "time_sleep" "addc_vm_restart_wait" {
-  create_duration = "5m"
+  create_duration = "10m"
   depends_on = [
     azurerm_virtual_machine_run_command.addc_vm_restart,
   ]
@@ -138,7 +138,7 @@ resource "null_resource" "setup_domain_controller_copy" {
       password        = var.domain_admin_pswd
       host            = azurerm_public_ip.addc_public_ip[1].ip_address
       target_platform = "windows"
-      timeout         = "3m"
+      timeout         = "10m"
     }
   }
   depends_on = [
@@ -180,7 +180,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart_second" {
 
 # Wait for the second VM to restart after domain controller promotion
 resource "time_sleep" "addc_vm_restart_wait_second" {
-  create_duration = "5m"
+  create_duration = "10m"
   depends_on = [
     azurerm_virtual_machine_run_command.addc_vm_restart_second
   ]
@@ -197,7 +197,7 @@ resource "null_resource" "add_sqlacl_copy" {
       password        = var.domain_admin_pswd
       host            = azurerm_public_ip.addc_public_ip[0].ip_address
       target_platform = "windows"
-      timeout         = "3m"
+      timeout         = "10m"
     }
   }
 }
@@ -213,7 +213,7 @@ resource "null_resource" "add_domain_accounts_copy" {
       password        = var.domain_admin_pswd
       host            = azurerm_public_ip.addc_public_ip[0].ip_address
       target_platform = "windows"
-      timeout         = "3m"
+      timeout         = "10m"
     }
   }
 }

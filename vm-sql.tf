@@ -52,6 +52,9 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
     storage_account_type = "Premium_LRS"
     disk_size_gb         = 127
   }
+  winrm_listener {
+    protocol = "Http"
+  }
   identity {
     type = "SystemAssigned"
   }
@@ -93,7 +96,7 @@ resource "null_resource" "sql_sysadmin_script_copy" {
       password        = var.sql_localadmin_pswd
       host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
       target_platform = "windows"
-      timeout         = "3m"
+      timeout         = "10m"
     }
   }
 
@@ -115,7 +118,7 @@ resource "null_resource" "sql_localadmin_script_copy" {
       password        = var.sql_localadmin_pswd
       host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
       target_platform = "windows"
-      timeout         = "3m"
+      timeout         = "10m"
     }
   }
 
@@ -216,7 +219,7 @@ resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
 
 # Wait for ALL SQL VMs to restart after domain join
 resource "time_sleep" "sqlha_domainjoin_wait" {
-  create_duration = "5m"
+  create_duration = "10m"
   depends_on = [
     azurerm_virtual_machine_run_command.sqlha_domainjoin_restart,
   ]
