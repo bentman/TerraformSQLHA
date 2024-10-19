@@ -94,7 +94,27 @@ resource "azurerm_virtual_network_peering" "peering2" {
   depends_on                   = [azurerm_virtual_network.vnet]
 }
 
-########## OUTPUT EXAMPLES ##########
-output "network_subnet_prefixes" {
-  value = [for subnet in azurerm_subnet.snet_addc : subnet.address_prefixes]
+#################### OUTPUT EXAMPLES ####################
+output "vnet_address" {
+  description = "Map of Virtual Networks with their address spaces and locations"
+  value = {
+    for idx, vnet in azurerm_virtual_network.vnet : vnet.name => {
+      region = vnet.location
+      space  = vnet.address_space
+    }
+  }
+}
+
+output "vnet_peering" {
+  description = "VNet peering configurations"
+  value = {
+    "${var.shortregions[0]}-to-${var.shortregions[1]}" = {
+      peering_name = azurerm_virtual_network_peering.peering1.name
+      vnet_name    = azurerm_virtual_network_peering.peering1.virtual_network_name
+    }
+    "${var.shortregions[1]}-to-${var.shortregions[0]}" = {
+      peering_name = azurerm_virtual_network_peering.peering2.name
+      vnet_name    = azurerm_virtual_network_peering.peering2.virtual_network_name
+    }
+  }
 }
