@@ -1,69 +1,97 @@
-# Azure Multi-Region Lab Environment
+# **Azure Multi-Region Lab Environment**  
 
-This repository provides a Terraform configuration for deploying a multi-region Azure lab environment. The project is designed to set up an infrastructure with SQL High Availability (SQLHA) using Windows Server Failover Cluster (WSFC) and Active Directory Domain Controllers (ADDC) across two Azure regions.
+This repository provides a **Terraform configuration** for deploying a **multi-region Azure lab environment**. The infrastructure includes **SQL High Availability (SQLHA)** using **Windows Server Failover Clustering (WSFC)** and **Active Directory Domain Controllers (ADDC)** across two Azure regions.
 
-## Overview
+---
 
-The lab environment includes the following features:
+## **Overview**  
 
-- A single resource group to host all resources
-- Infrastructure provisioned across two Azure regions
-- Virtual Network setup with multiple subnets (gateways, domain controllers, applications, databases, & clients)
-- Two Active Directory Domain Controllers (one per region)
-- SQLHA with Always On Availability Groups configured in each regions
-- Load Balancers for SQLHA listener configured for 'SingleSubnet'
-- Custom scripts for domain setup, cluster configuration, and SQL management
+The lab environment offers:  
+- **Multi-region infrastructure** with deployments across **two Azure regions**.  
+- **Two Resource Groups**: One per region to organize resources.  
+- **Virtual Network setup** with multiple subnets (gateways, domain controllers, applications, databases, and clients).  
+- **Two Active Directory Domain Controllers** (one per region).  
+- **SQLHA** with Always On Availability Groups and load balancers using **‘SingleSubnet’** design.  
+- **Custom scripts**: For domain setup, cluster configuration, and SQL management tasks.
 
-## Components
+---
 
-1. **Resource Group**: A single Azure resource group to host all resources
+## **Components**
 
-2. **Networking**: vNets & subnets in two regions, includes peering, NAT gateways, and route tables
+1. **Resource Groups**  
+   - Two resource groups: One per region to manage resources separately.
 
-3. **Active Directory**: Domain Controller in each region configured from scripts to promote and synchronize domain
+2. **Networking Configuration** (now integrated into `main.tf`):  
+   - **Virtual Networks**: One vNet per region.  
+   - **Subnets**:  
+     - **Gateway Subnet** (`snet_gw`): For VPN/NAT gateways.  
+     - **ADDC Subnet** (`snet_addc`): For Active Directory Domain Controllers.  
+     - **Database Subnet** (`snet_db`): For SQL services.  
+     - **Application Subnet** (`snet_app`): For application workloads.  
+     - **Client Subnet** (`snet_client`): For external-facing services.  
+   - **Public IPs**: Static IPs for gateways, SQL servers, and NAT gateways.  
+   - **NAT Gateways**: Provide outbound internet traffic for application and database subnets.  
+   - **Load Balancers**: Manage SQLHA listener traffic across regions.  
+   - **Route Tables**: Custom routes for internet access.  
+   - **Network Peering**: Enable secure communication between regions.  
+   - **NSGs**: Define security rules for remote access, internal communication, and outbound traffic.  
+   - **NSG Associations**: Applied to specific subnets for security enforcement.
 
-4. **SQL High Availability (Ready for Disaster Recovery Scenarios)**
-   - SQL HA clusters/AG are set up in a 'SingleSubnet' configuration using a load balancer
-   - SQL Virtual Machines are configured with Always On Availability Groups
-   - Load balancers are set up to manage SQLHA listener traffic
-   - SQL Virtual Machine Groups and WSFC Domain Profiles are configured for HA setup
+---
 
-## Project Structure
+## **Network Configuration Table**
 
-- **tfvars file**: Contains the secret values for authentication (example, keep yours secure!)
-- **providers.tf**: Specifies the required Terraform and provider versions
-- **v-network.tf**: Virtual Network and subnet configurations for both regions
-- **main.tf**: Main Terraform configuration file containing all resources for the Azure lab environment
-- **variables.tf**: Contains all variables used throughout the Terraform configuration, including sensitive information placeholders
-- **scripts**: PowerShell scripts for setting up domain controllers, configuring clusters, and setting up SQL permissions
+| **Address Space**  | **Subnet**            | **Resources**                              |
+|--------------------|-----------------------|--------------------------------------------|
+| **10.1.0.0/24**    | **Gateway Subnet**    | **usw-nat-gateway** <br>- Public IP: `usw-gateway-ip` (Static) |
+|                    | **ADDC Subnet**       | **usw-addc-vm** <br>- NIC: `usw-addc-nic` <br>- Private IP: 10.1.0.5 <br>- Public IP: `usw-addc-pip` (Static) |
+|                    | **Database Subnet**   | **usw-sqlha-lb** <br>- Frontend IP: 10.1.0.20 (Static) <br> **usw-sqlha0-vm** <br>- NIC: `usw-sqlha0-nic` <br>- Private IP: 10.1.0.9 <br>- Public IP: `usw-sqlha0-public-ip` (Static) <br> **usw-sqlha1-vm** <br>- NIC: `usw-sqlha1-nic` <br>- Private IP: 10.1.0.10 <br>- Public IP: `usw-sqlha1-public-ip` (Static) |
+| **10.1.1.0/24**    | **Gateway Subnet**    | **use-nat-gateway** <br>- Public IP: `use-gateway-ip` (Static) |
+|                    | **ADDC Subnet**       | **use-addc-vm** <br>- NIC: `use-addc-nic` <br>- Private IP: 10.1.1.5 <br>- Public IP: `use-addc-pip` (Static) |
+|                    | **Database Subnet**   | **use-sqlha-lb** <br>- Frontend IP: 10.1.1.20 (Static) <br> **use-sqlha0-vm** <br>- NIC: `use-sqlha0-nic` <br>- Private IP: 10.1.1.9 <br>- Public IP: `use-sqlha0-public-ip` (Static) <br> **use-sqlha1-vm** <br>- NIC: `use-sqlha1-nic` <br>- Private IP: 10.1.1.10 <br>- Public IP: `use-sqlha1-public-ip` (Static) |
 
-## Important Notes
+---
 
-- **Lab Environment**: This setup is intended as a lab environment for learning/testing scenarios
-- **Single Resource Group**: All resources are placed in a single resource group for simplicity
-- **Security Considerations**: Public IPs for SSH, default passwords, etc. should not be used in production
-- **Sensitive Data**: Ensure your `terraform.tfvars` file is not committed to the repository to keep secrets safe
-- **.gitignore**: Use the included `.gitignore` file to manage `commit` & `push`
+## **Project Structure**
 
-## Prerequisites
+- **`terraform.tfvars`**: Holds secret values for authentication (keep secure).  
+- **`providers.tf`**: Specifies required Terraform and provider versions.  
+- **`main.tf`**: Main Terraform configuration, including all networking and resources.  
+- **`variables.tf`**: Contains all variables and sensitive data placeholders.  
+- **`scripts/`**: PowerShell scripts for domain setup, clusters, and SQL configurations.
 
-- **Terraform**: v1.6.0 or higher
-- **Azure Subscription**: Active subscription with necessary privileges
-- **Service Principal**: Credentials for deploying resources in Azure
-- **PowerShell**: For running custom scripts locally
+---
 
-## Deployment Steps
+## **Important Notes**
+
+- **Lab Environment**: Designed for learning and testing scenarios.  
+- **Security Considerations**: Use strong passwords and manage public IPs carefully.  
+- **Sensitive Data**: Exclude `terraform.tfvars` from version control to secure credentials.  
+- **.gitignore**: Use the included `.gitignore` to manage version control effectively.
+
+---
+
+## **Prerequisites**
+
+- **Terraform**: v1.6.0 or higher.  
+- **Azure Subscription**: With necessary privileges.  
+- **Service Principal**: For authentication with Azure.  
+- **PowerShell**: For executing custom scripts.
+
+---
+
+## **Deployment Steps**
 
 1. **Clone the Repository**:
    ```powershell
    git clone https://github.com/bentman/TerraformSQLHA
-   pushd .\TerraformSQLHA
+   cd .\TerraformSQLHA
    ```
 
-2. **Set Up Environment Variables**: Create a `terraform.tfvars` file with the following confidential information:
-   - `arm_tenant_id`
-   - `arm_subscription_id`
-   - `arm_client_id`
+2. **Set Up Environment Variables**: Create a `terraform.tfvars` file with:
+   - `arm_tenant_id`  
+   - `arm_subscription_id`  
+   - `arm_client_id`  
    - `arm_client_secret`
 
 3. **Initialize Terraform**:
@@ -81,26 +109,18 @@ The lab environment includes the following features:
    terraform apply
    ```
 
-6. **Access Resources**: Use the generated public IPs to access domain controllers and SQL servers for customization.
+6. **Access Resources**: Use the generated public IPs to connect to domain controllers and SQL servers.
 
-## Cleanup
+---
 
-To remove all resources created by this configuration, run:
+## **Cleanup**
+
+To remove all resources created by this configuration:
 ```sh
 terraform destroy
 ```
 
-## Helpful Links
-
-- [Terraform Azure | HashiCorp](https://developer.hashicorp.com/terraform/tutorials/azure-get-started)
-- [Terraform Azure | Microsoft](https://learn.microsoft.com/en-us/azure/developer/terraform/)
-- [Create on-premises virtual network in Azure using Terraform](https://learn.microsoft.com/en-us/azure/developer/terraform/hub-spoke-on-prem)
-- [Quickstart: Create a lab in Azure DevTest Labs using Terraform](https://learn.microsoft.com/en-us/azure/devtest-labs/quickstarts/create-lab-windows-vm-terraform)
-- [Quickstart: Use Terraform to create a Windows VM - Azure Virtual Machines](https://learn.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-terraform)
-- [Deploying an Azure Windows VM using Terraform IaC](https://www.c-sharpcorner.com/article/deploying-an-azure-windows-vm-using-terraform-iac/)
-- [Azure - Provisioning a Windows Virtual Machine using Terraform](https://www.patrickkoch.dev/posts/post_12/)
-- [The Infrastructure Developer's Guide to Terraform: Azure Edition](https://cloudacademy.com/learning-paths/terraform-on-azure-01-1-2658/)
-- [Terraform on Azure | Udemy](https://www.udemy.com/course/terraform-on-azure/)
+---
 
 ## Contributions
 Contributions are welcome. Please open an issue or submit a pull request if you have any suggestions, questions, or would like to contribute to the project.
