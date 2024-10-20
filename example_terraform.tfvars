@@ -1,4 +1,4 @@
-#################### VALUES ####################
+/*#################### VALUES ####################
 ########## SECRET VALUES ##########
 #####  Declare confidential variables here
 #####  Store secret values in *.tfvars file
@@ -47,7 +47,7 @@ sql_svc_acct_user   = "svc_mssqlserver" // sql service username
 sql_svc_acct_pswd   = "P@ssword!234"    // sql service password ('P@ssword!234')
 sql_sysadmin_user   = "sqladmin"        // sql sysadmin username ('sysadmin')
 sql_sysadmin_pswd   = "P@ssword!234"    // sql sysadmin password ('P@ssword!234')
-
+*/
 #################### NOTES ####################
 # Instructions for generating a new Service Principal and Secret using PowerShell
 #

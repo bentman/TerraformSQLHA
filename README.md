@@ -58,7 +58,7 @@ The lab environment offers:
 - **`providers.tf`**: Specifies required Terraform and provider versions.  
 - **`main.tf`**: Main Terraform configuration, including all networking and resources.  
 - **`variables.tf`**: Contains all variables and sensitive data placeholders.  
-- **`scripts/`**: PowerShell scripts for domain setup, clusters, and SQL configurations.
+- **`.\scripts.ps1`**: PowerShell scripts for domain setup, clusters, and SQL configurations.
 
 ---
 
