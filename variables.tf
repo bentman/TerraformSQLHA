@@ -67,6 +67,24 @@ variable "vm_sqlha_size" {
   default     = "Standard_D2s_v3"
 }
 
+variable "sql_disk_data" {
+  description = "SQL Disk - Data"
+  type        = number
+  default     = 90
+}
+
+variable "sql_disk_logs" {
+  description = "SQL Disk - Logs"
+  type        = number
+  default     = 60
+}
+
+variable "sql_disk_temp" {
+  description = "SQL Disk - Temp"
+  type        = number
+  default     = 30
+}
+
 variable "vm_shutdown_hhmm" {
   description = "Time for VM Shutdown HHMM"
   type        = string

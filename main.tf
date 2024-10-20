@@ -1,16 +1,4 @@
-#################### DATA ####################
-##### What's my IP? (from where you are running terraform)
-# Fetches the public IPv6 address
-data "http" "myip6" {
-  url = "https://icanhazip.com"
-}
-
-# Fetches the public IPv4 address
-data "http" "myip4" {
-  url = "https://ipv4.icanhazip.com"
-}
-
-#################### LOCALS ####################
+#################### LOCALS TO CREATE LDAP OU NAME ####################
 locals {
   # Generate locals for domain join parameters
   split_domain    = split(".", var.domain_name)
@@ -18,7 +6,7 @@ locals {
   servers_ou_path = "OU=Servers,${join(",", [for dc in local.split_domain : "DC=${dc}"])}"
 }
 
-#################### MAIN ####################
+#################### RESOURCE GROUP FOR EACH REGION ####################
 resource "azurerm_resource_group" "rg" {
   count    = length(var.regions)
   name     = lower("rg-multiregion-${var.shortregions[count.index]}")
@@ -391,14 +379,15 @@ resource "azurerm_network_interface" "addc_nic" {
 # Windows Virtual Machine for ADDC in each region
 resource "azurerm_windows_virtual_machine" "addc_vm" {
   count               = length(var.regions)
-  name                = lower("${var.shortregions[count.index]}-addc-vm")
-  computer_name       = upper("${var.shortregions[count.index]}-addc")
   location            = var.regions[count.index]
   resource_group_name = azurerm_resource_group.rg[count.index].name
+  name                = lower("${var.shortregions[count.index]}-addc-vm")
+  computer_name       = upper("${var.shortregions[count.index]}-addc")
+  size                = var.vm_addc_size
+  license_type        = "Windows_Server"
   admin_username      = var.domain_admin_user
   admin_password      = var.domain_admin_pswd
   provision_vm_agent  = true
-  size                = var.vm_addc_size
   tags                = var.labtags
 
   network_interface_ids = [
@@ -659,13 +648,14 @@ resource "azurerm_network_interface" "sqlha_nic" {
 # SQLHA Virtual Machines in both regions
 resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   count               = length(var.regions) * 2
-  name                = lower("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-vm")
-  computer_name       = upper("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}")
   location            = var.regions[floor(count.index / 2)]
   resource_group_name = azurerm_resource_group.rg[floor(count.index / 2)].name
-  admin_username      = var.domain_admin_user
-  admin_password      = var.domain_admin_pswd
-  size                = "Standard_D2s_v3"
+  name                = lower("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-vm")
+  computer_name       = upper("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}")
+  size                = var.vm_sqlha_size
+  license_type        = "Windows_Server"
+  admin_username      = var.sql_localadmin_user
+  admin_password      = var.sql_localadmin_pswd
   tags                = var.labtags
 
   network_interface_ids = [
@@ -757,9 +747,9 @@ resource "azurerm_managed_disk" "sqlha_data" {
   name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-data-disk"
   location             = var.regions[floor(count.index / 2)]
   resource_group_name  = azurerm_resource_group.rg[floor(count.index / 2)].name
-  storage_account_type = "Premium_LRS"
+  storage_account_type = "Standard_LRS"
   create_option        = "Empty"
-  disk_size_gb         = 90
+  disk_size_gb         = var.sql_disk_data
   tags                 = var.labtags
 
   depends_on = [
@@ -774,9 +764,9 @@ resource "azurerm_managed_disk" "sqlha_logs" {
   name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-log-disk"
   location             = var.regions[floor(count.index / 2)]
   resource_group_name  = azurerm_resource_group.rg[floor(count.index / 2)].name
-  storage_account_type = "Premium_LRS"
+  storage_account_type = "Standard_LRS"
   create_option        = "Empty"
-  disk_size_gb         = 60
+  disk_size_gb         = var.sql_disk_logs
   tags                 = var.labtags
 
   depends_on = [
@@ -791,9 +781,9 @@ resource "azurerm_managed_disk" "sqlha_temp" {
   name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-temp-disk"
   location             = var.regions[floor(count.index / 2)]
   resource_group_name  = azurerm_resource_group.rg[floor(count.index / 2)].name
-  storage_account_type = "Premium_LRS"
+  storage_account_type = "Standard_LRS"
   create_option        = "Empty"
-  disk_size_gb         = 30
+  disk_size_gb         = var.sql_disk_logs
   tags                 = var.labtags
 
   depends_on = [
