@@ -1052,3 +1052,49 @@ resource "null_resource" "add_sql_acl_clusters" {
     azurerm_mssql_virtual_machine.az_sqlha,
   ]
 }
+
+# Wait for add sql acl
+resource "time_sleep" "sqlha_sqlacl_wait" {
+  create_duration = "5m"
+
+  depends_on = [
+    null_resource.add_sql_acl_clusters,
+  ]
+}
+
+########## ENABLE SHUTDOWN SCHEDULE ON VMS ##########
+# Enable shutdown schedule for ADDC VMs
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "addc_vm_shutdown" {
+  count                 = length(azurerm_windows_virtual_machine.addc_vm)
+  virtual_machine_id    = azurerm_windows_virtual_machine.addc_vm[count.index].id
+  location              = azurerm_windows_virtual_machine.addc_vm[count.index].location
+  enabled               = true
+  daily_recurrence_time = var.vm_shutdown_hhmm
+  timezone              = var.vm_shutdown_tz
+
+  notification_settings {
+    enabled = false
+  }
+
+  depends_on = [
+    time_sleep.sqlha_sqlacl_wait,
+  ]
+}
+
+# Enable shutdown schedule for SQLHA VMs
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "sqlha_vm_shutdown" {
+  count                 = length(azurerm_windows_virtual_machine.sqlha_vm)
+  virtual_machine_id    = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
+  location              = azurerm_windows_virtual_machine.sqlha_vm[count.index].location
+  enabled               = true
+  daily_recurrence_time = var.vm_shutdown_hhmm
+  timezone              = var.vm_shutdown_tz
+
+  notification_settings {
+    enabled = false
+  }
+
+  depends_on = [
+    time_sleep.sqlha_sqlacl_wait,
+  ]
+}
