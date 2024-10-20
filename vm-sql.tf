@@ -18,45 +18,43 @@ resource "azurerm_network_interface" "sqlha_nic" {
   resource_group_name            = azurerm_resource_group.rg.name
   accelerated_networking_enabled = true
   tags                           = var.labtags
-
   ip_configuration {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.snet_db[floor(count.index / 2)].id
     private_ip_address_allocation = "Static"
     private_ip_address            = cidrhost(azurerm_subnet.snet_db[floor(count.index / 2)].address_prefixes[0], count.index % 2 == 0 ? 9 : 10)
+    primary                       = true
     public_ip_address_id          = azurerm_public_ip.sqlha_public_ip[count.index].id
   }
-
   dns_servers = [
     azurerm_network_interface.addc_nic[floor(count.index / 2)].ip_configuration[0].private_ip_address,
     "1.1.1.1",
     "8.8.8.8"
   ]
+  depends_on = [
+    azurerm_public_ip.sqlha_public_ip,
+  ]
 }
 
 # SQLHA Virtual Machines in both regions
 resource "azurerm_windows_virtual_machine" "sqlha_vm" {
-  count                 = length(var.regions) * 2
-  name                  = lower("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-vm")
-  computer_name         = upper("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}")
-  location              = var.regions[floor(count.index / 2)]
-  resource_group_name   = azurerm_resource_group.rg.name
-  network_interface_ids = [azurerm_network_interface.sqlha_nic[count.index].id]
-  admin_username        = var.domain_admin_user
-  admin_password        = var.domain_admin_pswd
-  size                  = "Standard_D2s_v3"
-  tags                  = var.labtags
+  count               = length(var.regions) * 2
+  name                = lower("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-vm")
+  computer_name       = upper("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}")
+  location            = var.regions[floor(count.index / 2)]
+  resource_group_name = azurerm_resource_group.rg.name
+  admin_username      = var.domain_admin_user
+  admin_password      = var.domain_admin_pswd
+  size                = "Standard_D2s_v3"
+  tags                = var.labtags
+  network_interface_ids = [
+    azurerm_network_interface.sqlha_nic[count.index].id
+  ]
   os_disk {
     name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-os-disk"
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
     disk_size_gb         = 127
-  }
-  winrm_listener {
-    protocol = "Http"
-  }
-  identity {
-    type = "SystemAssigned"
   }
   source_image_reference {
     publisher = "MicrosoftSQLServer"
@@ -64,29 +62,50 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
     sku       = "Enterprise"
     version   = "latest"
   }
+  winrm_listener {
+    protocol = "Http"
+  }
+  identity {
+    type = "SystemAssigned"
+  }
 }
 
 # Install OpenSSH on SQLHA Virtual Machines
 resource "azurerm_virtual_machine_extension" "install_openssh" {
   count                      = length(var.regions) * 2
-  name                       = "InstallOpenSSH"
+  name                       = "InstallOpenSSH-sqlha${count.index}"
+  virtual_machine_id         = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
+  publisher                  = "Microsoft.Azure.OpenSSH"
+  type                       = "WindowsOpenSSH"
+  type_handler_version       = "3.0"
+  auto_upgrade_minor_version = true
+  depends_on = [
+    azurerm_windows_virtual_machine.sqlha_vm,
+  ]
+}
+
+resource "azurerm_virtual_machine_extension" "allow_remote_sqlha" {
+  count                      = length(var.regions) * 2
+  name                       = "allow-remote-sqlha${count.index}"
   virtual_machine_id         = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
   publisher                  = "Microsoft.Compute"
   type                       = "CustomScriptExtension"
   type_handler_version       = "1.10"
   auto_upgrade_minor_version = true
-  protected_settings = jsonencode({
-    commandToExecute = "powershell.exe -Command Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0; Start-Service sshd; Set-Service -Name sshd -StartupType 'Automatic'"
-  })
+  tags                       = var.labtags
+  settings                   = <<SETTINGS
+    {
+      "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command \"New-NetFirewallRule -DisplayName 'Open Port 22 for SSH' -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow -Profile Any; Set-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv4-In)' -Enabled True; Set-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv6-In)' -Enabled True; Set-ItemProperty -Path 'HKLM:\\\\System\\\\CurrentControlSet\\\\Control\\\\Terminal Server' -Name 'fDenyTSConnections' -Value 0; Set-ItemProperty -Path 'HKLM:\\\\System\\\\CurrentControlSet\\\\Control\\\\Terminal Server\\\\WinStations\\\\RDP-Tcp' -Name 'UserAuthentication' -Value 0; Restart-Service -Name TermService -Force;\""
+    }
+SETTINGS
   depends_on = [
-    azurerm_windows_virtual_machine.sqlha_vm,
+    azurerm_virtual_machine_extension.install_openssh,
   ]
 }
 
 # Copy Add-SqlSysAdmins.ps1 script
 resource "null_resource" "sql_sysadmin_script_copy" {
   count = length(azurerm_windows_virtual_machine.sqlha_vm)
-
   provisioner "file" {
     source      = "${path.module}/Add-SqlSysAdmins.ps1"
     destination = "C:\\Add-SqlSysAdmins.ps1"
@@ -99,16 +118,14 @@ resource "null_resource" "sql_sysadmin_script_copy" {
       timeout         = "10m"
     }
   }
-
   depends_on = [
-    azurerm_virtual_machine_extension.install_openssh,
+    azurerm_virtual_machine_extension.allow_remote_sqlha,
   ]
 }
 
 # Copy Add-SqlLocalAdmins.ps1 script
 resource "null_resource" "sql_localadmin_script_copy" {
   count = length(azurerm_windows_virtual_machine.sqlha_vm)
-
   provisioner "file" {
     source      = "${path.module}/Add-SqlLocalAdmins.ps1"
     destination = "C:\\Add-SqlLocalAdmins.ps1"
@@ -121,7 +138,6 @@ resource "null_resource" "sql_localadmin_script_copy" {
       timeout         = "10m"
     }
   }
-
   depends_on = [
     azurerm_virtual_machine_extension.install_openssh,
   ]
@@ -137,6 +153,10 @@ resource "azurerm_managed_disk" "sqlha_data" {
   create_option        = "Empty"
   disk_size_gb         = 90
   tags                 = var.labtags
+  depends_on = [
+    azurerm_windows_virtual_machine.sqlha_vm,
+    null_resource.sql_localadmin_script_copy,
+  ]
 }
 
 # Log disks for SQLHA VMs
@@ -149,6 +169,10 @@ resource "azurerm_managed_disk" "sqlha_logs" {
   create_option        = "Empty"
   disk_size_gb         = 60
   tags                 = var.labtags
+  depends_on = [
+    azurerm_windows_virtual_machine.sqlha_vm,
+    azurerm_managed_disk.sqlha_data,
+  ]
 }
 
 # TempDB disks for SQLHA VMs
@@ -161,6 +185,10 @@ resource "azurerm_managed_disk" "sqlha_temp" {
   create_option        = "Empty"
   disk_size_gb         = 30
   tags                 = var.labtags
+  depends_on = [
+    azurerm_windows_virtual_machine.sqlha_vm,
+    azurerm_managed_disk.sqlha_logs,
+  ]
 }
 
 # Data Disk Attachments for SQLHA VMs
@@ -174,6 +202,10 @@ resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_attachments" {
   virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[floor(count.index / 3)].id
   lun                = count.index % 3
   caching            = count.index % 3 == 0 ? "ReadWrite" : count.index % 3 == 1 ? "ReadOnly" : "None"
+  depends_on = [
+    azurerm_windows_virtual_machine.sqlha_vm,
+    azurerm_managed_disk.sqlha_temp,
+  ]
 }
 
 # Domain join SQLHA nodes
@@ -269,7 +301,7 @@ resource "azurerm_virtual_machine_extension" "add_sqlsysadmins_exec" {
 
 # Wait for localadmin & sysadmin script (& set depends_on flag ;-))
 resource "time_sleep" "sqlha_final_wait" {
-  create_duration = "1m"
+  create_duration = "5m"
   depends_on = [
     azurerm_virtual_machine_extension.add_sqlsysadmins_exec,
   ]

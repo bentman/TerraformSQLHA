@@ -10,8 +10,7 @@ resource "azurerm_storage_account" "sqlha_witness" {
   account_kind               = "StorageV2"
   https_traffic_only_enabled = true
   min_tls_version            = "TLS1_2"
-
-  tags = var.labtags
+  tags                       = var.labtags
 }
 
 # Blob container for cloud sql-quorum
@@ -20,6 +19,17 @@ resource "azurerm_storage_container" "sqlha_quorum" {
   name                  = lower("${var.shortregions[count.index]}sqlquorum")
   storage_account_name  = azurerm_storage_account.sqlha_witness[count.index].name
   container_access_type = "private"
+  depends_on = [
+    azurerm_storage_account.sqlha_witness,
+  ]
+}
+
+# Wait for storage creation (& set depends_on flag ;-))
+resource "time_sleep" "sqlha_storage_wait" {
+  create_duration = "1m"
+  depends_on = [
+    azurerm_storage_container.sqlha_quorum,
+  ]
 }
 
 ########## OUTPUT EXAMPLES ##########

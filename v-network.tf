@@ -1,5 +1,5 @@
-#################### VIRTUAL NETWORK (VNET) AND SUBNETS ####################
-# Create Virtual Network (VNet) for each region specified in the variable 'regions'
+#################### VIRTUAL NETWORKS AND SUBNETS ####################
+# Create Virtual Network (VNet) for each region
 resource "azurerm_virtual_network" "vnet" {
   for_each            = { for idx, reg in var.regions : idx => reg }
   name                = "${var.shortregions[each.key]}-vnet"
@@ -54,6 +54,142 @@ resource "azurerm_subnet" "snet_client" {
   address_prefixes     = [cidrsubnet(var.address_spaces[each.key], 4, 15)]
 }
 
+#################### NETWORK SECURITY GROUP (NSG) ####################
+# Create a single Network Security Group for all subnets
+resource "azurerm_network_security_group" "nsg" {
+  name                = "lab-nsg-server"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  tags                = var.labtags
+
+  # NSG rule to allow SSH access
+  security_rule {
+    name                       = "Allow-SSH"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "22"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  # NSG rule to allow RDP access
+  security_rule {
+    name                       = "Allow-RDP"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  # NSG rule to allow ICMP (ping)
+  security_rule {
+    name                       = "Allow-ICMP"
+    priority                   = 900
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Icmp"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  # NSG rule to allow internal traffic
+  security_rule {
+    name                       = "Allow-Internal"
+    priority                   = 1000
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "10.0.0.0/8"
+    destination_address_prefix = "*"
+  }
+}
+
+# NSG Association for GW Subnet in both regions
+resource "azurerm_subnet_network_security_group_association" "nsg_association_gw0" {
+  subnet_id                 = azurerm_subnet.snet_gw[0].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+resource "azurerm_subnet_network_security_group_association" "nsg_association_gw1" {
+  subnet_id                 = azurerm_subnet.snet_gw[1].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+# NSG Association for ADDC Subnet in both regions
+resource "azurerm_subnet_network_security_group_association" "nsg_association_addc0" {
+  subnet_id                 = azurerm_subnet.snet_addc[0].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+resource "azurerm_subnet_network_security_group_association" "nsg_association_addc1" {
+  subnet_id                 = azurerm_subnet.snet_addc[1].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+# NSG Association for DB Subnet in both regions
+resource "azurerm_subnet_network_security_group_association" "nsg_association_db0" {
+  subnet_id                 = azurerm_subnet.snet_db[0].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+resource "azurerm_subnet_network_security_group_association" "nsg_association_db1" {
+  subnet_id                 = azurerm_subnet.snet_db[1].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+# NSG Association for APP Subnet in both regions
+resource "azurerm_subnet_network_security_group_association" "nsg_association_app0" {
+  subnet_id                 = azurerm_subnet.snet_app[0].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+resource "azurerm_subnet_network_security_group_association" "nsg_association_app1" {
+  subnet_id                 = azurerm_subnet.snet_app[1].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+# NSG Association for Client Subnet in both regions
+resource "azurerm_subnet_network_security_group_association" "nsg_association_client0" {
+  subnet_id                 = azurerm_subnet.snet_client[0].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+resource "azurerm_subnet_network_security_group_association" "nsg_association_client1" {
+  subnet_id                 = azurerm_subnet.snet_client[1].id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+#################### ROUTE TABLE AND ROUTES ####################
+# Create Route Table for each region
+resource "azurerm_route_table" "route_table" {
+  for_each            = azurerm_virtual_network.vnet
+  name                = "${var.shortregions[each.key]}-route-table"
+  location            = each.value.location
+  resource_group_name = azurerm_resource_group.rg.name
+  tags                = var.labtags
+}
+
+# Create a route to the Internet for each Route Table
+resource "azurerm_route" "route_to_internet" {
+  for_each            = azurerm_route_table.route_table
+  name                = "${var.shortregions[each.key]}-route-to-internet"
+  resource_group_name = azurerm_resource_group.rg.name
+  route_table_name    = each.value.name
+  address_prefix      = "0.0.0.0/0"
+  next_hop_type       = "Internet"
+}
+
 #################### PUBLIC IP AND NAT GATEWAY ####################
 # Create Public IP for NAT Gateway in each region
 resource "azurerm_public_ip" "gateway_ip" {
@@ -65,7 +201,7 @@ resource "azurerm_public_ip" "gateway_ip" {
   tags                = var.labtags
 }
 
-# Create NAT Gateway in each region for outbound internet connectivity
+# Create NAT Gateway in each region
 resource "azurerm_nat_gateway" "nat_gateway" {
   for_each            = azurerm_virtual_network.vnet
   name                = "${var.shortregions[each.key]}-nat-gateway"
@@ -76,10 +212,9 @@ resource "azurerm_nat_gateway" "nat_gateway" {
 
 # Associate NAT Gateway with the Active Directory Domain Controllers (ADDC) Subnet
 resource "azurerm_subnet_nat_gateway_association" "nat_association" {
-  for_each       = azurerm_subnet.snet_addc
+  for_each       = azurerm_subnet.snet_gw
   subnet_id      = each.value.id
   nat_gateway_id = azurerm_nat_gateway.nat_gateway[each.key].id
-  depends_on     = [azurerm_nat_gateway.nat_gateway]
 }
 
 #################### VIRTUAL NETWORK PEERING ####################
@@ -107,94 +242,7 @@ resource "azurerm_virtual_network_peering" "peering2" {
   depends_on                   = [azurerm_virtual_network.vnet]
 }
 
-#################### NETWORK SECURITY GROUP (NSG) FOR OPEN COMMUNICATION ####################
-# Create Network Security Group (NSG) for each Virtual Network
-resource "azurerm_network_security_group" "nsg_vnet" {
-  for_each            = azurerm_virtual_network.vnet
-  name                = "${var.shortregions[each.key]}-nsg-vnet"
-  location            = each.value.location
-  resource_group_name = azurerm_resource_group.rg.name
-  tags                = var.labtags
-}
-
-# Allow communication between Virtual Networks for open communication
-resource "azurerm_network_security_rule" "allow_vnet_communication" {
-  for_each                        = azurerm_virtual_network.vnet
-  name                            = "allow-vnet-communication"
-  priority                        = 100
-  direction                       = "Inbound"
-  access                          = "Allow"
-  protocol                        = "*"
-  source_port_range               = "*"
-  destination_port_range          = "*"
-  source_address_prefix = "*"
-  destination_address_prefix = "*"
-  resource_group_name             = azurerm_resource_group.rg.name
-  network_security_group_name     = azurerm_network_security_group.nsg_vnet[each.key].name
-}
-
-# Allow RDP access (port 3389) from any source to all Virtual Machines
-resource "azurerm_network_security_rule" "allow_rdp" {
-  for_each                        = azurerm_virtual_network.vnet
-  name                            = "allow-rdp"
-  priority                        = 200
-  direction                       = "Inbound"
-  access                          = "Allow"
-  protocol                        = "Tcp"
-  source_port_range               = "*"
-  destination_port_range          = "3389"
-  source_address_prefix           = "*"
-  destination_address_prefix      = "*"
-  resource_group_name             = azurerm_resource_group.rg.name
-  network_security_group_name     = azurerm_network_security_group.nsg_vnet[each.key].name
-}
-
-# Allow SSH access (port 22) from any source to all Virtual Machines
-resource "azurerm_network_security_rule" "allow_ssh" {
-  for_each                        = azurerm_virtual_network.vnet
-  name                            = "allow-ssh"
-  priority                        = 300
-  direction                       = "Inbound"
-  access                          = "Allow"
-  protocol                        = "Tcp"
-  source_port_range               = "*"
-  destination_port_range          = "22"
-  source_address_prefix           = "*"
-  destination_address_prefix      = "*"
-  resource_group_name             = azurerm_resource_group.rg.name
-  network_security_group_name     = azurerm_network_security_group.nsg_vnet[each.key].name
-}
-
-#################### ASSOCIATE NETWORK SECURITY GROUP (NSG) WITH SUBNETS ####################
-# Associate NSG with the Active Directory Domain Controllers (ADDC) Subnet
-resource "azurerm_subnet_network_security_group_association" "nsg_association" {
-  for_each             = azurerm_subnet.snet_addc
-  subnet_id            = each.value.id
-  network_security_group_id = azurerm_network_security_group.nsg_vnet[each.key].id
-}
-
-# Associate NSG with the Application Subnet
-resource "azurerm_subnet_network_security_group_association" "nsg_association_app" {
-  for_each             = azurerm_subnet.snet_app
-  subnet_id            = each.value.id
-  network_security_group_id = azurerm_network_security_group.nsg_vnet[each.key].id
-}
-
-# Associate NSG with the Database Subnet
-resource "azurerm_subnet_network_security_group_association" "nsg_association_db" {
-  for_each             = azurerm_subnet.snet_db
-  subnet_id            = each.value.id
-  network_security_group_id = azurerm_network_security_group.nsg_vnet[each.key].id
-}
-
-# Associate NSG with the Client Subnet
-resource "azurerm_subnet_network_security_group_association" "nsg_association_client" {
-  for_each             = azurerm_subnet.snet_client
-  subnet_id            = each.value.id
-  network_security_group_id = azurerm_network_security_group.nsg_vnet[each.key].id
-}
-
-#################### OUTPUT EXAMPLES ####################
+#################### OUTPUTS ####################
 # Output the Virtual Network address spaces and locations for each region
 output "vnet_address" {
   description = "Map of Virtual Networks with their address spaces and locations"
@@ -212,11 +260,11 @@ output "vnet_peering" {
   value = {
     "${var.shortregions[0]}-to-${var.shortregions[1]}" = {
       peering_name = azurerm_virtual_network_peering.peering1.name
-      vnet_name    = azurerm_virtual_network_peering.peering1.virtual_network_name
+      vnet_name    = azurerm_virtual_network.vnet[0].name
     }
     "${var.shortregions[1]}-to-${var.shortregions[0]}" = {
       peering_name = azurerm_virtual_network_peering.peering2.name
-      vnet_name    = azurerm_virtual_network_peering.peering2.virtual_network_name
+      vnet_name    = azurerm_virtual_network.vnet[1].name
     }
   }
 }

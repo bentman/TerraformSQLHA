@@ -25,6 +25,9 @@ resource "azurerm_lb_probe" "sqlha_probe" {
   port                = 5999
   interval_in_seconds = 5
   number_of_probes    = 2
+  depends_on = [
+    azurerm_lb.sqlha_lb,
+  ]
 }
 
 # Load Balancer rule for SQL listener
@@ -38,6 +41,9 @@ resource "azurerm_lb_rule" "sqlha_lb_rule" {
   frontend_ip_configuration_name = "${var.shortregions[count.index]}-sqlha-frontend"
   backend_address_pool_ids       = [azurerm_lb_backend_address_pool.sqlha_backend_pool[count.index].id]
   probe_id                       = azurerm_lb_probe.sqlha_probe[count.index].id
+  depends_on = [
+    azurerm_lb.sqlha_lb,
+  ]
 }
 
 # Backend address pool for Load Balancer
@@ -45,6 +51,17 @@ resource "azurerm_lb_backend_address_pool" "sqlha_backend_pool" {
   count           = length(var.regions)
   name            = "${var.shortregions[count.index]}-sqlha-backend-pool"
   loadbalancer_id = azurerm_lb.sqlha_lb[count.index].id
+  depends_on = [
+    azurerm_lb.sqlha_lb,
+  ]
+}
+
+# Wait for lb creation (& set depends_on flag ;-))
+resource "time_sleep" "sqlha_lb_wait" {
+  create_duration = "1m"
+  depends_on = [
+    azurerm_lb_backend_address_pool.sqlha_backend_pool,
+  ]
 }
 
 ########## OUTPUT EXAMPLES ##########

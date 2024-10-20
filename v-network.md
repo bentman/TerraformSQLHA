@@ -1,37 +1,56 @@
 # Azure Network Configuration (v-network.tf)
 
-This repository contains Terraform configurations to create a virtual network setup in Azure with multiple subnets, NAT gateways, security rules, and network gateways.
+This repository contains Terraform code to deploy a virtual network setup in Azure with multiple subnets, gateways, and high availability components.
 
 ## Overview
 
-The Terraform configuration defines the following Azure networking components across two regions:
+The configuration creates the following network components across two regions:
 
-1. **Virtual Networks**: Two virtual networks (`vnet`) are created, each in a different Azure region.
+1. **Virtual Networks**: Two virtual networks (`vnet`), one per region.
 
-2. **Subnets**: Each virtual network contains the following subnets:
-   - **Gateway Subnet (`snet_gw`)**: Used for the VPN gateway.
-   - **AD Domain Controller Subnet (`snet_addc`)**: For hosting Active Directory Domain Controllers.
-   - **Database Subnet (`snet_db`)**: Dedicated for database services.
-   - **Application Subnet (`snet_app`)**: For hosting application workloads.
-   - **Client Subnet (`snet_client`)**: Designated for client-facing services.
+2. **Subnets**: Each network includes:
+   - **Gateway Subnet (`snet_gw`)**: For VPN or NAT gateways.
+   - **ADDC Subnet (`snet_addc`)**: Hosts Active Directory Domain Controllers.
+   - **Database Subnet (`snet_db`)**: For SQL database services.
+   - **Application Subnet (`snet_app`)**: For applications.
+   - **Client Subnet (`snet_client`)**: For clients or external-facing services.
 
-3. **Public IPs**: Static public IPs are created for the VPN gateways.
+3. **Public IPs**: Static IPs for gateways, SQL servers, and NAT.
 
-4. **NAT Gateway**: Each application and database subnet has a NAT gateway associated to allow outbound internet traffic.
+4. **NAT Gateway**: Enables outbound traffic from application and database subnets.
 
-5. **Routing**: Custom route tables are created to route traffic to the internet and associated with the appropriate subnets.
+5. **Load Balancers**: For SQL High Availability (HA) across both regions.
 
-6. **Network Peering**: Virtual network peering is established between the two virtual networks to enable communication between them.
+6. **Routing**: Routes traffic to the internet via custom route tables.
 
-7. **Network Security Groups (NSGs)**: NSGs are used to control inbound and outbound traffic for each virtual network.
-   - **Allow Internet Outbound**: Allows outbound traffic to the internet.
-   - **Allow SSH/RDP**: Allows inbound SSH and RDP connections from the internet.
-   - **Allow Internal Traffic**: Allows traffic between resources within the same virtual network.
+7. **Network Peering**: Enables communication between the virtual networks.
 
-8. **Security Group Associations**: The NSGs are associated with the `snet_client` subnets to enforce security rules.
+8. **Network Security Groups (NSGs)**: Control traffic flow with rules:
+   - **Outbound Internet**: Allows outgoing internet traffic.
+   - **Inbound SSH/RDP**: Enables remote access.
+   - **Internal Traffic**: Allows communication within the network.
+
+9. **NSG Associations**: Applied to `snet_client` subnets to enforce rules.
 
 ## Network Variables
-The following variables are used in the configuration:
-- `var.shortregions`: Short codes for Azure regions (e.g., `eastus`, `westeurope`).
-- `var.regions`: Full Azure region names.
-- `var.address_spaces`: CIDR blocks defining the address spaces for the virtual networks.
+
+- `var.shortregions`: Short codes for regions (e.g., `usw`, `use`).
+- `var.regions`: Full region names (e.g., `westus`, `eastus`).
+- `var.address_spaces`: CIDR blocks for vNet address spaces (e.g., `10.1.0.0/24`, `10.1.1.0/24`).
+
+## Network Configuration Table
+
+| **Address Space**  | **Subnet**            | **Resources**                              |
+|--------------------|-----------------------|--------------------------------------------|
+| 10.1.0.0/24        | **Gateway Subnet**    | **usw-nat-gateway** <br>- Public IP: usw-gateway-ip (Static) |
+|                    | **ADDC Subnet**       | **usw-addc-vm** <br>- NIC: usw-addc-nic <br>- Private IP: 10.1.0.5 <br>- Public IP: usw-addc-pip (Static) |
+|                    | **Database Subnet**   | **usw-sqlha-lb** <br>- Frontend IP: 10.1.0.20 (Static) <br>**usw-sqlha0-vm** <br>- NIC: usw-sqlha0-nic <br>- Private IP: 10.1.0.9 <br>- Public IP: usw-sqlha0-public-ip (Static) <br>**usw-sqlha1-vm** <br>- NIC: usw-sqlha1-nic <br>- Private IP: 10.1.0.10 <br>- Public IP: usw-sqlha1-public-ip (Static) |
+|                    | **Application Subnet**| None                                       |
+|                    | **Client Subnet**     | None                                       |
+| 10.1.1.0/24        | **Gateway Subnet**    | **use-nat-gateway** <br>- Public IP: use-gateway-ip (Static) |
+|                    | **ADDC Subnet**       | **use-addc-vm** <br>- NIC: use-addc-nic <br>- Private IP: 10.1.1.5 <br>- Public IP: use-addc-pip (Static) |
+|                    | **Database Subnet**   | **use-sqlha-lb** <br>- Frontend IP: 10.1.1.20 (Static) <br>**use-sqlha0-vm** <br>- NIC: use-sqlha0-nic <br>- Private IP: 10.1.1.9 <br>- Public IP: use-sqlha0-public-ip (Static) <br>**use-sqlha1-vm** <br>- NIC: use-sqlha1-nic <br>- Private IP: 10.1.1.10 <br>- Public IP: use-sqlha1-public-ip (Static) |
+|                    | **Application Subnet**| None                                       |
+|                    | **Client Subnet**     | None                                       |
+
+This table outlines the Azure network design with virtual networks, subnets, NAT gateways, load balancers, and high availability VMs across regions.

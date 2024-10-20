@@ -52,7 +52,7 @@ variable "labtags" {
 ########## NETWORK VARS 
 variable "address_spaces" {
   description = "vNet Address Space with CIDR notation"
-  default     = ["10.1.0.0/24", "10.2.0.0/24"]
+  default     = ["10.1.0.0/24", "10.1.1.0/24"]
 }
 
 ########## VM VARIABLES

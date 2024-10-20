@@ -9,6 +9,8 @@ resource "azurerm_network_interface_backend_address_pool_association" "sqlha_nic
   backend_address_pool_id = azurerm_lb_backend_address_pool.sqlha_backend_pool[floor(count.index / 2)].id
   depends_on = [
     time_sleep.sqlha_final_wait,
+    time_sleep.sqlha_storage_wait,
+    time_sleep.sqlha_lb_wait,
   ]
 }
 
@@ -38,7 +40,7 @@ resource "azurerm_mssql_virtual_machine_group" "sqlha_vmg" {
 
 # Wait for vmg creation (& set depends_on flag ;-))
 resource "time_sleep" "sqlha_vmg_wait" {
-  create_duration = "3m"
+  create_duration = "5m"
   depends_on = [
     azurerm_mssql_virtual_machine_group.sqlha_vmg,
   ]
@@ -87,7 +89,7 @@ resource "azurerm_mssql_virtual_machine" "az_sqlha" {
 
 # Wait for vmg creation (& set depends_on flag ;-))
 resource "time_sleep" "sqlha_mssqlvm_wait" {
-  create_duration = "3m"
+  create_duration = "5m"
   depends_on = [
     azurerm_mssql_virtual_machine.az_sqlha,
   ]
@@ -124,7 +126,7 @@ resource "null_resource" "add_sql_acl_clusters" {
 
 # Wait for vmg creation (& set depends_on flag ;-))
 resource "time_sleep" "sqlha_sqlacl_wait" {
-  create_duration = "3m"
+  create_duration = "5m"
   depends_on = [
     null_resource.add_sql_acl_clusters,
   ]
