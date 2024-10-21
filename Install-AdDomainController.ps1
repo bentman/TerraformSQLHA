@@ -25,7 +25,7 @@ param (
 # Convert the safe mode administrator password to a secure string
 $safe_admin_pswd = ConvertTo-SecureString $safemode_admin_pswd -AsPlainText -Force
 $domo_admin_pswd = ConvertTo-SecureString $domain_admin_pswd -AsPlainText -Force
-$domainCredential = New-Object System.Management.Automation.PSCredential ($domain_admin_user, $domo_admin_pswd)
+$domainCred = New-Object System.Management.Automation.PSCredential ($domain_admin_user, $domo_admin_pswd)
 
 # Create directories for setup if they do not exist
 foreach ($path in @("$env:SystemDrive\BUILD\Content", "$env:SystemDrive\BUILD\Logs", "$env:SystemDrive\BUILD\Scripts")) {
@@ -61,10 +61,10 @@ Import-Module -Name DnsServer -Verbose
 # Add the server as an additional domain controller
 Install-ADDSDomainController `
     -DomainName $domain_name `
-    -Credential $domainCredential `
+    -Credential $domainCred `
     -SafeModeAdministratorPassword $safe_admin_pswd `
     -InstallDns `
-    -NoRebootOnCompletionInstall `
+    -NoRebootOnCompletion `
     -Force `
     -Verbose
 

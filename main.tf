@@ -370,7 +370,12 @@ resource "azurerm_network_interface" "addc_nic" {
     primary                       = true
     public_ip_address_id          = azurerm_public_ip.addc_public_ip[count.index].id
   }
-
+  dns_servers = [
+    cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5),  # First DC's IP
+    cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5),  # Second DC's IP
+    "1.1.1.1",
+    "8.8.8.8",
+  ]
   depends_on = [
     azurerm_public_ip.addc_public_ip
   ]
@@ -485,7 +490,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart" {
 
 # Wait for the VM to restart after domain promotion
 resource "time_sleep" "addc_vm_restart_wait" {
-  create_duration = "10m"
+  create_duration = "15m"
   depends_on = [
     azurerm_virtual_machine_run_command.addc_vm_restart,
   ]
@@ -545,7 +550,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart_second" {
 
 # Wait for the second VM to restart after domain controller promotion
 resource "time_sleep" "addc_vm_restart_wait_second" {
-  create_duration = "10m"
+  create_duration = "15m"
   depends_on = [
     azurerm_virtual_machine_run_command.addc_vm_restart_second,
   ]
@@ -595,7 +600,7 @@ resource "null_resource" "add_domain_accounts_copy" {
 resource "null_resource" "add_domain_accounts_exec" {
   connection {
     type            = "ssh"
-    host            = azurerm_windows_virtual_machine.addc_vm[0].id
+    host            = azurerm_public_ip.addc_public_ip[0].ip_address
     user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
     password        = var.domain_admin_pswd
     target_platform = "windows"
@@ -642,9 +647,8 @@ resource "azurerm_network_interface" "sqlha_nic" {
   }
 
   dns_servers = [
-    azurerm_network_interface.addc_nic[floor(count.index / 2)].ip_configuration[0].private_ip_address,
-    "1.1.1.1",
-    "8.8.8.8"
+    cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5),  # First DC's IP
+    cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5),  # Second DC's IP
   ]
 
   depends_on = [
@@ -791,7 +795,7 @@ resource "azurerm_virtual_machine_extension" "sqlha_domainjoin" {
   settings = jsonencode({
     Name    = var.domain_name
     OUPath  = local.servers_ou_path
-    User    = "${var.domain_netbios_name}\\${var.domain_admin_user}"
+    User    = var.domain_admin_user
     Restart = "false"
     Options = "3"
   })
@@ -1043,7 +1047,7 @@ resource "time_sleep" "sqlha_mssqlvm_wait" {
 
 ########## SET ACLS FOR VMG ACCESS OVER THE SERVERS OU ##########
 resource "null_resource" "add_sql_acl_clusters" {
-  count = 1  # Run once for both regions
+  count = 1 # Run once for both regions
 
   triggers = {
     sqlcluster_region1 = azurerm_mssql_virtual_machine_group.sqlha_vmg[0].name
