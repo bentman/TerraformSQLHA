@@ -591,19 +591,24 @@ resource "null_resource" "add_domain_accounts_copy" {
 }
 
 # Execute the setup domain accounts script on the first Active Directory Domain Controller VM
-resource "azurerm_virtual_machine_extension" "add_domain_accounts_exec" {
-  name                       = "DomainAccounts"
-  virtual_machine_id         = azurerm_windows_virtual_machine.addc_vm[0].id
-  publisher                  = "Microsoft.Compute"
-  type                       = "CustomScriptExtension"
-  type_handler_version       = "1.10"
-  auto_upgrade_minor_version = true
-  tags                       = var.labtags
-  settings                   = <<SETTINGS
-    {
-      "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-DomainAccounts.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user} -sql_svc_acct_pswd ${var.sql_svc_acct_pswd}"
-    }
-  SETTINGS
+# Execute Add-DomainAccounts.ps1 remotely on ADDC VMs
+resource "null_resource" "add_domain_accounts_exec" {
+  triggers = {
+    vm_name = azurerm_windows_virtual_machine.addc_vm[count.index].name
+  }
+  connection {
+    type            = "ssh"
+    host            = azurerm_windows_virtual_machine.addc_vm[0].id
+    user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
+    password        = var.domain_admin_pswd
+    target_platform = "windows"
+    timeout         = "10m"
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-DomainAccounts.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user} -sql_svc_acct_pswd ${var.sql_svc_acct_pswd}"
+    ]
+  }
   depends_on = [
     null_resource.add_domain_accounts_copy,
   ]
