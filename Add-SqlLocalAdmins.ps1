@@ -1,18 +1,14 @@
 <#
 .SYNOPSIS
     Adds SQL-related accounts to the local Administrators group on a Windows server.
-
 .DESCRIPTION
     This script ensures that the specified SQL service and installation accounts 
     are added to the local Administrators group. It also checks network connectivity 
     to the domain and logs all activities.
-
 .PARAMETER domain_name
     The domain name (FQDN) to which the server belongs.
-
 .PARAMETER sql_svc_acct_user
     The SQL service account user to be added to the local Administrators group.
-
 .EXAMPLE
     ./Add-SqlLocalAdmins.ps1 -domain_name "contoso.com" -sql_svc_acct_user "sqlservice"
 .NOTES
@@ -26,9 +22,7 @@ param (
 )
 
 # Ensure the 'C:\BUILD\Logs\' directory exists; create it if it does not
-if (!(Test-Path -Path 'C:\BUILD\Logs\')) {
-    New-Item -Path 'C:\BUILD\' -ItemType Directory -Force
-}
+if (!(Test-Path -Path 'C:\BUILD\Logs\')) { New-Item -Path 'C:\BUILD\' -ItemType Directory -Force }
 
 # Start a transcript to log all activities
 Start-Transcript -Path 'C:\BUILD\Logs\transcript_Add-SqlLocalAdmins.log'

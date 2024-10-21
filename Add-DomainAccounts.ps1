@@ -1,49 +1,67 @@
+<#
+.SYNOPSIS
+    Sets up domain accounts, including creating Organizational Units (OUs) and adding users.
+.DESCRIPTION
+    This script automates the process of creating OUs, service accounts, and domain users, 
+    and adding them to relevant AD groups. It is intended for lab or testing purposes.
+.PARAMETER domain_name
+    The Fully Qualified Domain Name (FQDN) of the domain (e.g., "starwars.lan").
+.PARAMETER temp_admin_pswd
+    A temporary password to be used for newly created domain users.
+.PARAMETER sql_svc_acct_user
+    The username for the SQL service account to be created.
+.PARAMETER sql_svc_acct_pswd
+    The password for the SQL service account.
+.NOTES
+    This script is intended for non-production use in a lab environment. 
+    It assumes the Active Directory module is available on the machine running the script.
+#>
+
 [CmdletBinding()]
-# This script is used to set up domain accounts, including creating Organizational Units and adding users.
-param ( 
-    # The fully qualified domain name (FQDN) of the domain to manage.
+param (
     [Parameter(ValueFromPipeline = $true, Mandatory = $true)] [string]$domain_name,
-    # Temporary password to be used for newly created domain users.
     [Parameter(ValueFromPipeline = $true, Mandatory = $true)] [string]$temp_admin_pswd,
-    # Username for the SQL service account.
     [Parameter(ValueFromPipeline = $true, Mandatory = $true)] [string]$sql_svc_acct_user,
-    # Password for the SQL service account.
     [Parameter(ValueFromPipeline = $true, Mandatory = $true)] [string]$sql_svc_acct_pswd
 )
 
-# Split the domain name into its components to construct the distinguished name (DN) path.
+# Split the domain name into its components to construct the distinguished name (DN) path
 $split_domain = $domain_name.Split(".")
-# Construct DN path from split domain components
 $dn_path = ($split_domain | ForEach-Object { "DC=$_" }) -join ","
 
-# Ensure the logging directory exists, create it if not already present.
-if (!(Test-Path -Path 'C:\BUILD\Logs\')) { 
-    New-Item -Path 'C:\BUILD\Logs\' -ItemType Directory -Force 
-}
+# Ensure the logs directory exists
+if (!(Test-Path -Path 'C:\BUILD\Logs\')) { New-Item -Path 'C:\BUILD\Logs\' -ItemType Directory -Force }
 
-# Start transcript logging for all actions in the script to help with auditing.
-Start-Transcript -Path 'C:\BUILD\Logs\transcript-Add_DomainUsers.log'
+# Start logging
+Start-Transcript -Path 'C:\BUILD\Logs\transcript-Add_DomainUsers.log' -Force
 
-# Import Active Directory module to use AD-related cmdlets
+# Import the Active Directory module
 Import-Module ActiveDirectory
 
-# Create a new Organizational Unit (OU) named 'Servers' in the domain if it does not already exist.
+# Create the 'Servers' OU if it doesn't exist
 if (-not (Get-ADOrganizationalUnit -Filter "Name -eq 'Servers'" -SearchBase "$dn_path")) {
     New-ADOrganizationalUnit -Name 'Servers' -Path "$dn_path" -Description 'OU for Server objects' -Verbose
 }
 
-# Create new AD user for SQL service account with specified details
+# Create the 'SVC_Accounts' OU if it doesn't exist
+if (-not (Get-ADOrganizationalUnit -Filter "Name -eq 'SVC_Accounts'" -SearchBase "$dn_path")) {
+    New-ADOrganizationalUnit -Name 'SVC_Accounts' -Path "$dn_path" -Description 'OU for Service Accounts' -Verbose
+}
+
+# Construct the Distinguished Name (DN) path for 'SVC_Accounts'
+$svc_accounts_ou_path = "OU=SVC_Accounts,$dn_path"
+
+# Create SQL service account in the 'SVC_Accounts' OU
 New-ADUser `
     -SamAccountName $sql_svc_acct_user `
     -Name 'SVC_SQL' `
     -GivenName 'SQL' `
     -Surname 'SERVICE ACCOUNT' `
     -UserPrincipalName "$sql_svc_acct_user@$domain_name" `
+    -Path $svc_accounts_ou_path `
     -AccountPassword (ConvertTo-SecureString "$sql_svc_acct_pswd" -AsPlainText -Force) `
-    -Enabled $true `
-    -Verbose
+    -Enabled $true -Verbose
 
-# Set password options and other properties for the SQL service account
 Set-ADUser -Identity $sql_svc_acct_user `
     -PasswordNeverExpires $true `
     -ChangePasswordAtLogon $false `
@@ -51,18 +69,17 @@ Set-ADUser -Identity $sql_svc_acct_user `
     -Description 'SQL Service Account' `
     -DisplayName 'SQL Service Account'
 
-# Create new AD user for SQL installation with specified details
+# Create SQL installation account in the 'SVC_Accounts' OU
 New-ADUser `
     -SamAccountName 'sqlinstall' `
     -Name 'sqlinstall' `
     -GivenName 'SQL' `
     -Surname 'SQL INSTALLER' `
     -UserPrincipalName "sqlinstall@$domain_name" `
+    -Path $svc_accounts_ou_path `
     -AccountPassword (ConvertTo-SecureString "$sql_svc_acct_pswd" -AsPlainText -Force) `
-    -Enabled $true `
-    -Verbose
+    -Enabled $true -Verbose
 
-# Set password options and other properties for the SQL installation user.
 Set-ADUser -Identity 'sqlinstall' `
     -PasswordNeverExpires $true `
     -ChangePasswordAtLogon $false `
@@ -70,22 +87,16 @@ Set-ADUser -Identity 'sqlinstall' `
     -Description 'SQL Install Account' `
     -DisplayName 'SQL Install Account'
 
-# Add newly created SQL install user to 'Domain Admins' group (more permission than required)
 Add-ADGroupMember -Identity "Domain Admins" -Members 'sqlinstall'
 
-# Create a new Organizational Unit (OU) named 'Service_Accounts' in the domain if it does not already exist.
-if (-not (Get-ADOrganizationalUnit -Filter "Name -eq 'Service_Accounts'" -SearchBase "$dn_path")) {
-    New-ADOrganizationalUnit -Name 'Service_Accounts' -Path "$dn_path" -Description 'OU for Service_Accounts' -Verbose
-}
-
-# Define the array of users to be created in the domain.
+# Define users to be added
 $users = @(
-    @{Name="mando"; GivenName="Din"; Surname="Djarin"; Office="Mandalore"},
-    @{Name="luke"; GivenName="Luke"; Surname="Skywalker"; Office="Tatooine"},
-    @{Name="han"; GivenName="Han"; Surname="Solo"; Office="Millennium Falcon"}
+    @{Name = "mando"; GivenName = "Din"; Surname = "Djarin"; Office = "Mandalore" },
+    @{Name = "luke"; GivenName = "Luke"; Surname = "Skywalker"; Office = "Tatooine" },
+    @{Name = "han"; GivenName = "Han"; Surname = "Solo"; Office = "Millennium Falcon" }
 )
 
-# Create each user in the array and add them to the Domain Admins group.
+# Add users to the domain and assign them to the 'Domain Admins' group
 foreach ($user in $users) {
     New-ADUser -Name $user.Name `
         -UserPrincipalName "$($user.Name)@$domain_name" `
@@ -94,9 +105,9 @@ foreach ($user in $users) {
         -Surname $user.Surname `
         -Office $user.Office `
         -AccountPassword (ConvertTo-SecureString "$temp_admin_pswd" -AsPlainText -Force) `
-        -Enabled $true -ChangePasswordAtLogon $true -PassThru -Verbose | 
+        -Enabled $true -ChangePasswordAtLogon $true -PassThru -Verbose |
     Add-ADGroupMember -Identity "Domain Admins" -Members $_ -Verbose
 }
 
-# Stop transcript
+# Stop logging
 Stop-Transcript

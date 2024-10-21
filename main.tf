@@ -371,8 +371,8 @@ resource "azurerm_network_interface" "addc_nic" {
     public_ip_address_id          = azurerm_public_ip.addc_public_ip[count.index].id
   }
   dns_servers = [
-    cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5),  # First DC's IP
-    cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5),  # Second DC's IP
+    cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5), # First DC's IP
+    cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5), # Second DC's IP
     "1.1.1.1",
     "8.8.8.8",
   ]
@@ -647,8 +647,8 @@ resource "azurerm_network_interface" "sqlha_nic" {
   }
 
   dns_servers = [
-    cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5),  # First DC's IP
-    cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5),  # Second DC's IP
+    cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5), # First DC's IP
+    cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5), # Second DC's IP
   ]
 
   depends_on = [
@@ -782,32 +782,44 @@ resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_attachments" {
 }
 
 ########## DOMAIN JOIN SQLHA NODES ##########
-# Domain join SQLHA nodes
-resource "azurerm_virtual_machine_extension" "sqlha_domainjoin" {
-  count                      = length(var.regions) * 2
-  name                       = "DomainJoin"
-  virtual_machine_id         = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
-  publisher                  = "Microsoft.Compute"
-  type                       = "JsonADDomainExtension"
-  type_handler_version       = "1.3"
-  auto_upgrade_minor_version = true
-
-  settings = jsonencode({
-    Name    = var.domain_name
-    OUPath  = local.servers_ou_path
-    User    = var.domain_admin_user
-    Restart = "false"
-    Options = "3"
-  })
-
-  protected_settings = jsonencode({
-    Password = var.domain_admin_pswd
-  })
-
+# Copy Add-SqlDomainJoin.ps1 script
+resource "null_resource" "sql_domainjoin_script_copy" {
+  count = length(var.regions) * 2
+  provisioner "file" {
+    source      = "${path.module}/Add-SqlDomainJoin.ps1"
+    destination = "C:\\Add-SqlDomainJoin.ps1"
+    connection {
+      type            = "ssh"
+      user            = var.sql_localadmin_user
+      password        = var.sql_localadmin_pswd
+      host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
+      target_platform = "windows"
+      timeout         = "10m"
+    }
+  }
   depends_on = [
-    time_sleep.addc_vm_restart_wait_second,
-    null_resource.add_domain_accounts_exec,
     azurerm_virtual_machine_data_disk_attachment.sqlha_attachments,
+  ]
+}
+
+# Execute Add-SqlDomainJoin.ps1 script
+resource "null_resource" "sql_domainjoin_script_exec" {
+  count = length(var.regions) * 2
+  connection {
+    type            = "ssh"
+    host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
+    user            = var.sql_localadmin_user
+    password        = var.sql_localadmin_pswd
+    target_platform = "windows"
+    timeout         = "10m"
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlLocalAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user}"
+    ]
+  }
+  depends_on = [
+    null_resource.sql_domainjoin_script_copy,
   ]
 }
 
@@ -817,20 +829,18 @@ resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
   name               = "RestartCommand"
   location           = var.regions[floor(count.index / 2)]
   virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
-
   source {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
-
   depends_on = [
-    azurerm_virtual_machine_extension.sqlha_domainjoin,
+    null_resource.sql_domainjoin_script_exec,
   ]
 }
+
 
 # Wait for ALL SQL VMs to restart after domain join
 resource "time_sleep" "sqlha_domainjoin_wait" {
   create_duration = "10m"
-
   depends_on = [
     azurerm_virtual_machine_run_command.sqlha_domainjoin_restart,
   ]
@@ -880,11 +890,6 @@ resource "null_resource" "sql_sysadmin_script_copy" {
 # Add local admins to SQL Servers
 resource "null_resource" "add_sqllocaladmins_exec" {
   count = length(var.regions) * 2
-
-  triggers = {
-    vm_name = azurerm_windows_virtual_machine.sqlha_vm[count.index].name
-  }
-
   connection {
     type            = "ssh"
     host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
@@ -893,13 +898,11 @@ resource "null_resource" "add_sqllocaladmins_exec" {
     target_platform = "windows"
     timeout         = "10m"
   }
-
   provisioner "remote-exec" {
     inline = [
       "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlLocalAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user}"
     ]
   }
-
   depends_on = [
     null_resource.sql_localadmin_script_copy,
   ]
@@ -908,11 +911,9 @@ resource "null_resource" "add_sqllocaladmins_exec" {
 # Add SQL sysadmins to SQL Servers
 resource "null_resource" "add_sqlsysadmins_exec" {
   count = length(var.regions) * 2
-
   triggers = {
     vm_name = azurerm_windows_virtual_machine.sqlha_vm[count.index].name
   }
-
   connection {
     type            = "ssh"
     host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
@@ -921,13 +922,11 @@ resource "null_resource" "add_sqlsysadmins_exec" {
     target_platform = "windows"
     timeout         = "10m"
   }
-
   provisioner "remote-exec" {
     inline = [
       "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlSysAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user} -sql_svc_acct_pswd ${var.sql_svc_acct_pswd}"
     ]
   }
-
   depends_on = [
     null_resource.add_sqllocaladmins_exec,
   ]
@@ -936,7 +935,6 @@ resource "null_resource" "add_sqlsysadmins_exec" {
 # Wait for local admin & sysadmin scripts to complete
 resource "time_sleep" "sqlha_final_wait" {
   create_duration = "5m"
-
   depends_on = [
     null_resource.add_sqlsysadmins_exec,
   ]

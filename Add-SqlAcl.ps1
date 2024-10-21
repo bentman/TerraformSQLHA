@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-Adds SQL clusters to the Active Directory access control list (ACL).
+    Adds SQL clusters to the Active Directory access control list (ACL).
 .DESCRIPTION
-This script grants the necessary permissions for SQL clusters in two regions
-by adding their computer accounts to the Servers OU in Active Directory.
+    This script grants the necessary permissions for SQL clusters in two regions
+    by adding their computer accounts to the Servers OU in Active Directory.
 .PARAMETER domain_name
-The domain name (FQDN) to which the clusters belong.
+    The domain name (FQDN) to which the clusters belong.
 .PARAMETER sqlcluster_region1
-The SQL cluster name for the first region.
+    The SQL cluster name for the first region.
 .PARAMETER sqlcluster_region2
-The SQL cluster name for the second region.
+    The SQL cluster name for the second region.
 .NOTES
     This script is intended for use in a lab or testing environment.
 #>
@@ -28,6 +28,8 @@ $servers_ou_path = "OU=Servers,$dn_path"
 
 # Ensure the log directory exists
 if (!(Test-Path -Path 'C:\BUILD\Logs\')) { New-Item -Path 'C:\BUILD\Logs\' -ItemType Directory -Force }
+
+# Start logging the process
 Start-Transcript -Path 'C:\BUILD\Logs\transcript_Add-SqlAcl.log'
 
 # Helper function to apply ACL for a given cluster
