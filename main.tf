@@ -593,9 +593,6 @@ resource "null_resource" "add_domain_accounts_copy" {
 # Execute the setup domain accounts script on the first Active Directory Domain Controller VM
 # Execute Add-DomainAccounts.ps1 remotely on ADDC VMs
 resource "null_resource" "add_domain_accounts_exec" {
-  triggers = {
-    vm_name = azurerm_windows_virtual_machine.addc_vm[count.index].name
-  }
   connection {
     type            = "ssh"
     host            = azurerm_windows_virtual_machine.addc_vm[0].id
@@ -805,7 +802,7 @@ resource "azurerm_virtual_machine_extension" "sqlha_domainjoin" {
 
   depends_on = [
     time_sleep.addc_vm_restart_wait_second,
-    azurerm_virtual_machine_extension.add_domain_accounts_exec,
+    null_resource.add_domain_accounts_exec,
     azurerm_virtual_machine_data_disk_attachment.sqlha_attachments,
   ]
 }
