@@ -33,7 +33,7 @@ foreach ($path in @("$env:SystemDrive\BUILD\Content", "$env:SystemDrive\BUILD\Lo
 }
 
 # Start transcript logging
-Start-Transcript -Path 'c:\BUILD\Logs\00-Provision-DC.log'
+Start-Transcript -Path 'c:\BUILD\Logs\Install-AdDomainController.log'
 
 # Set the security protocol to TLS 1.2
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
