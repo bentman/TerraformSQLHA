@@ -2,8 +2,7 @@
 .SYNOPSIS
     Sets up domain accounts, including creating Organizational Units (OUs) and adding users.
 .DESCRIPTION
-    This script automates the process of creating OUs, service accounts, and domain users, 
-    and adding them to relevant AD groups. It is intended for lab or testing purposes.
+    This script automates the process of creating OUs, svc_accounts, users, & adding to relevant AD groups.
 .PARAMETER domain_name
     The Fully Qualified Domain Name (FQDN) of the domain (e.g., "starwars.lan").
 .PARAMETER temp_admin_pswd
