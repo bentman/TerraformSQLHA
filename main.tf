@@ -1,4 +1,4 @@
-#################### LOCALS TO CREATE LDAP OU NAME ####################
+#################### LOCALS ####################
 locals {
   # Generate locals for domain join parameters
   split_domain    = split(".", var.domain_name)
@@ -6,7 +6,7 @@ locals {
   servers_ou_path = "OU=Servers,${join(",", [for dc in local.split_domain : "DC=${dc}"])}"
 }
 
-#################### RESOURCE GROUP FOR EACH REGION ####################
+#################### MAIN ####################
 resource "azurerm_resource_group" "rg" {
   count    = length(var.regions)
   name     = lower("rg-multiregion-${var.shortregions[count.index]}")
@@ -379,15 +379,14 @@ resource "azurerm_network_interface" "addc_nic" {
 # Windows Virtual Machine for ADDC in each region
 resource "azurerm_windows_virtual_machine" "addc_vm" {
   count               = length(var.regions)
-  location            = var.regions[count.index]
-  resource_group_name = azurerm_resource_group.rg[count.index].name
   name                = lower("${var.shortregions[count.index]}-addc-vm")
   computer_name       = upper("${var.shortregions[count.index]}-addc")
-  size                = var.vm_addc_size
-  license_type        = "Windows_Server"
+  location            = var.regions[count.index]
+  resource_group_name = azurerm_resource_group.rg[count.index].name
   admin_username      = var.domain_admin_user
   admin_password      = var.domain_admin_pswd
   provision_vm_agent  = true
+  size                = var.vm_addc_size
   tags                = var.labtags
 
   network_interface_ids = [
@@ -523,7 +522,7 @@ resource "azurerm_virtual_machine_extension" "setup_domain_controller_exec" {
   tags                       = var.labtags
   settings                   = <<SETTINGS
     {
-      "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Install-AdDomainController.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -safemode_admin_pswd ${var.safemode_admin_pswd}"
+      "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Install-AdDomainController.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -safemode_admin_pswd ${var.safemode_admin_pswd} -domain_admin_user ${var.domain_admin_user} -domain_admin_pswd ${var.domain_admin_pswd}"
     }
   SETTINGS
   depends_on = [
@@ -560,13 +559,16 @@ resource "null_resource" "add_sqlacl_copy" {
     destination = "c:\\SqlAcl.ps1"
     connection {
       type            = "ssh"
-      user            = var.domain_admin_user
+      user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
       password        = var.domain_admin_pswd
       host            = azurerm_public_ip.addc_public_ip[0].ip_address
       target_platform = "windows"
       timeout         = "10m"
     }
   }
+  depends_on = [
+    time_sleep.addc_vm_restart_wait_second,
+  ]
 }
 
 # Copy Add-DomainAccounts.ps1 script to the first Active Directory Domain Controller VM
@@ -576,13 +578,16 @@ resource "null_resource" "add_domain_accounts_copy" {
     destination = "c:\\Add-DomainAccounts.ps1"
     connection {
       type            = "ssh"
-      user            = var.domain_admin_user
+      user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
       password        = var.domain_admin_pswd
       host            = azurerm_public_ip.addc_public_ip[0].ip_address
       target_platform = "windows"
       timeout         = "10m"
     }
   }
+  depends_on = [
+    time_sleep.addc_vm_restart_wait_second,
+  ]
 }
 
 # Execute the setup domain accounts script on the first Active Directory Domain Controller VM
@@ -648,14 +653,13 @@ resource "azurerm_network_interface" "sqlha_nic" {
 # SQLHA Virtual Machines in both regions
 resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   count               = length(var.regions) * 2
-  location            = var.regions[floor(count.index / 2)]
-  resource_group_name = azurerm_resource_group.rg[floor(count.index / 2)].name
   name                = lower("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-vm")
   computer_name       = upper("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}")
-  size                = var.vm_sqlha_size
-  license_type        = "Windows_Server"
+  location            = var.regions[floor(count.index / 2)]
+  resource_group_name = azurerm_resource_group.rg[floor(count.index / 2)].name
   admin_username      = var.sql_localadmin_user
   admin_password      = var.sql_localadmin_pswd
+  size                = "Standard_D2s_v3"
   tags                = var.labtags
 
   network_interface_ids = [
@@ -700,46 +704,6 @@ resource "azurerm_virtual_machine_extension" "install_openssh_sql" {
   ]
 }
 
-# Copy Add-SqlSysAdmins.ps1 script
-resource "null_resource" "sql_sysadmin_script_copy" {
-  count = length(azurerm_windows_virtual_machine.sqlha_vm)
-  provisioner "file" {
-    source      = "${path.module}/Add-SqlSysAdmins.ps1"
-    destination = "C:\\Add-SqlSysAdmins.ps1"
-    connection {
-      type            = "ssh"
-      user            = var.sql_localadmin_user
-      password        = var.sql_localadmin_pswd
-      host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
-      target_platform = "windows"
-      timeout         = "10m"
-    }
-  }
-  depends_on = [
-    azurerm_virtual_machine_extension.install_openssh_sql,
-  ]
-}
-
-# Copy Add-SqlLocalAdmins.ps1 script
-resource "null_resource" "sql_localadmin_script_copy" {
-  count = length(azurerm_windows_virtual_machine.sqlha_vm)
-  provisioner "file" {
-    source      = "${path.module}/Add-SqlLocalAdmins.ps1"
-    destination = "C:\\Add-SqlLocalAdmins.ps1"
-    connection {
-      type            = "ssh"
-      user            = var.sql_localadmin_user
-      password        = var.sql_localadmin_pswd
-      host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
-      target_platform = "windows"
-      timeout         = "10m"
-    }
-  }
-  depends_on = [
-    azurerm_virtual_machine_extension.install_openssh_sql,
-  ]
-}
-
 ########## DATA DISKS FOR SQLHA VMS ##########
 # Data disks for SQLHA VMs
 resource "azurerm_managed_disk" "sqlha_data" {
@@ -747,14 +711,13 @@ resource "azurerm_managed_disk" "sqlha_data" {
   name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-data-disk"
   location             = var.regions[floor(count.index / 2)]
   resource_group_name  = azurerm_resource_group.rg[floor(count.index / 2)].name
-  storage_account_type = "Standard_LRS"
+  storage_account_type = "Premium_LRS"
   create_option        = "Empty"
-  disk_size_gb         = var.sql_disk_data
+  disk_size_gb         = 90
   tags                 = var.labtags
 
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
-    null_resource.sql_localadmin_script_copy,
   ]
 }
 
@@ -764,9 +727,9 @@ resource "azurerm_managed_disk" "sqlha_logs" {
   name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-log-disk"
   location             = var.regions[floor(count.index / 2)]
   resource_group_name  = azurerm_resource_group.rg[floor(count.index / 2)].name
-  storage_account_type = "Standard_LRS"
+  storage_account_type = "Premium_LRS"
   create_option        = "Empty"
-  disk_size_gb         = var.sql_disk_logs
+  disk_size_gb         = 60
   tags                 = var.labtags
 
   depends_on = [
@@ -781,9 +744,9 @@ resource "azurerm_managed_disk" "sqlha_temp" {
   name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-temp-disk"
   location             = var.regions[floor(count.index / 2)]
   resource_group_name  = azurerm_resource_group.rg[floor(count.index / 2)].name
-  storage_account_type = "Standard_LRS"
+  storage_account_type = "Premium_LRS"
   create_option        = "Empty"
-  disk_size_gb         = var.sql_disk_logs
+  disk_size_gb         = 30
   tags                 = var.labtags
 
   depends_on = [
@@ -868,47 +831,99 @@ resource "time_sleep" "sqlha_domainjoin_wait" {
 }
 
 ########## ADD LOCAL ADMINS AND SQL SYSADMINS TO SQL SERVERS ##########
-# Add local admins to SQL Servers
-resource "azurerm_virtual_machine_extension" "add_sqllocaladmins_exec" {
-  count                      = length(var.regions) * 2
-  name                       = "SqlLocalAdmin-${count.index}"
-  virtual_machine_id         = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
-  publisher                  = "Microsoft.Compute"
-  type                       = "CustomScriptExtension"
-  type_handler_version       = "1.10"
-  auto_upgrade_minor_version = true
-  tags                       = var.labtags
-
-  settings = <<SETTINGS
-    {
-      "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlLocalAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user}"
+# Copy Add-SqlLocalAdmins.ps1 script
+resource "null_resource" "sql_localadmin_script_copy" {
+  count = length(azurerm_windows_virtual_machine.sqlha_vm)
+  provisioner "file" {
+    source      = "${path.module}/Add-SqlLocalAdmins.ps1"
+    destination = "C:\\Add-SqlLocalAdmins.ps1"
+    connection {
+      type            = "ssh"
+      user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
+      password        = var.domain_admin_pswd
+      host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
+      target_platform = "windows"
+      timeout         = "10m"
     }
-  SETTINGS
+  }
+  depends_on = [
+    time_sleep.sqlha_domainjoin_wait,
+  ]
+}
+
+# Copy Add-SqlSysAdmins.ps1 script
+resource "null_resource" "sql_sysadmin_script_copy" {
+  count = length(azurerm_windows_virtual_machine.sqlha_vm)
+  provisioner "file" {
+    source      = "${path.module}/Add-SqlSysAdmins.ps1"
+    destination = "C:\\Add-SqlSysAdmins.ps1"
+    connection {
+      type            = "ssh"
+      user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
+      password        = var.domain_admin_pswd
+      host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
+      target_platform = "windows"
+      timeout         = "10m"
+    }
+  }
+  depends_on = [
+    null_resource.sql_localadmin_script_copy,
+  ]
+}
+
+# Add local admins to SQL Servers
+resource "null_resource" "add_sqllocaladmins_exec" {
+  count = length(var.regions) * 2
+
+  triggers = {
+    vm_name = azurerm_windows_virtual_machine.sqlha_vm[count.index].name
+  }
+
+  connection {
+    type            = "ssh"
+    host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
+    user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
+    password        = var.domain_admin_pswd
+    target_platform = "windows"
+    timeout         = "10m"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlLocalAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user}"
+    ]
+  }
 
   depends_on = [
-    time_sleep.sqlha_domainjoin_wait, # Ensures SQL VMs are domain joined and restarted
+    null_resource.sql_localadmin_script_copy,
   ]
 }
 
 # Add SQL sysadmins to SQL Servers
-resource "azurerm_virtual_machine_extension" "add_sqlsysadmins_exec" {
-  count                      = length(var.regions) * 2
-  name                       = "SqlSysAdmins-${count.index}"
-  virtual_machine_id         = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
-  publisher                  = "Microsoft.Compute"
-  type                       = "CustomScriptExtension"
-  type_handler_version       = "1.10"
-  auto_upgrade_minor_version = true
-  tags                       = var.labtags
+resource "null_resource" "add_sqlsysadmins_exec" {
+  count = length(var.regions) * 2
 
-  settings = <<SETTINGS
-    {
-      "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlSysAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user} -sql_svc_acct_pswd ${var.sql_svc_acct_pswd}"
-    }
-  SETTINGS
+  triggers = {
+    vm_name = azurerm_windows_virtual_machine.sqlha_vm[count.index].name
+  }
+
+  connection {
+    type            = "ssh"
+    host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
+    user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
+    password        = var.domain_admin_pswd
+    target_platform = "windows"
+    timeout         = "10m"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlSysAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user} -sql_svc_acct_pswd ${var.sql_svc_acct_pswd}"
+    ]
+  }
 
   depends_on = [
-    azurerm_virtual_machine_extension.add_sqllocaladmins_exec, # Ensures local admins script runs first
+    null_resource.add_sqllocaladmins_exec,
   ]
 }
 
@@ -917,7 +932,7 @@ resource "time_sleep" "sqlha_final_wait" {
   create_duration = "5m"
 
   depends_on = [
-    azurerm_virtual_machine_extension.add_sqlsysadmins_exec,
+    null_resource.add_sqlsysadmins_exec,
   ]
 }
 
@@ -1026,11 +1041,12 @@ resource "time_sleep" "sqlha_mssqlvm_wait" {
 
 ########## SET ACLS FOR VMG ACCESS OVER THE SERVERS OU ##########
 resource "null_resource" "add_sql_acl_clusters" {
-  count = length(var.regions)
+  count = 1  # Run once for both regions
 
   triggers = {
-    cluster_name = azurerm_mssql_virtual_machine_group.sqlha_vmg[count.index].name
-    sql_vms      = join(",", [for vm in azurerm_mssql_virtual_machine.az_sqlha : vm.virtual_machine_id])
+    sqlcluster_region1 = azurerm_mssql_virtual_machine_group.sqlha_vmg[0].name
+    sqlcluster_region2 = azurerm_mssql_virtual_machine_group.sqlha_vmg[1].name
+    sql_vms            = join(",", [for vm in azurerm_mssql_virtual_machine.az_sqlha : vm.virtual_machine_id])
   }
 
   provisioner "remote-exec" {
@@ -1044,57 +1060,11 @@ resource "null_resource" "add_sql_acl_clusters" {
     }
 
     inline = [
-      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlAcl.ps1 -domain_name ${var.domain_name} -sqlcluster_name ${azurerm_mssql_virtual_machine_group.sqlha_vmg[count.index].name}"
+      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlAcl.ps1 -domain_name ${var.domain_name} -sqlcluster_region1 ${azurerm_mssql_virtual_machine_group.sqlha_vmg[0].name} -sqlcluster_region2 ${azurerm_mssql_virtual_machine_group.sqlha_vmg[1].name}"
     ]
   }
 
   depends_on = [
     azurerm_mssql_virtual_machine.az_sqlha,
-  ]
-}
-
-# Wait for add sql acl
-resource "time_sleep" "sqlha_sqlacl_wait" {
-  create_duration = "5m"
-
-  depends_on = [
-    null_resource.add_sql_acl_clusters,
-  ]
-}
-
-########## ENABLE SHUTDOWN SCHEDULE ON VMS ##########
-# Enable shutdown schedule for ADDC VMs
-resource "azurerm_dev_test_global_vm_shutdown_schedule" "addc_vm_shutdown" {
-  count                 = length(azurerm_windows_virtual_machine.addc_vm)
-  virtual_machine_id    = azurerm_windows_virtual_machine.addc_vm[count.index].id
-  location              = azurerm_windows_virtual_machine.addc_vm[count.index].location
-  enabled               = true
-  daily_recurrence_time = var.vm_shutdown_hhmm
-  timezone              = var.vm_shutdown_tz
-
-  notification_settings {
-    enabled = false
-  }
-
-  depends_on = [
-    time_sleep.sqlha_sqlacl_wait,
-  ]
-}
-
-# Enable shutdown schedule for SQLHA VMs
-resource "azurerm_dev_test_global_vm_shutdown_schedule" "sqlha_vm_shutdown" {
-  count                 = length(azurerm_windows_virtual_machine.sqlha_vm)
-  virtual_machine_id    = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
-  location              = azurerm_windows_virtual_machine.sqlha_vm[count.index].location
-  enabled               = true
-  daily_recurrence_time = var.vm_shutdown_hhmm
-  timezone              = var.vm_shutdown_tz
-
-  notification_settings {
-    enabled = false
-  }
-
-  depends_on = [
-    time_sleep.sqlha_sqlacl_wait,
   ]
 }

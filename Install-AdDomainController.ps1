@@ -16,11 +16,16 @@
 [CmdletBinding()]
 param ( 
     [Parameter(ValuefromPipeline=$true,Mandatory=$true)] [string]$domain_name,
-    [Parameter(ValuefromPipeline=$true,Mandatory=$true)] [string]$safemode_admin_pswd
+    [Parameter(ValuefromPipeline=$true,Mandatory=$true)] [string]$domain_netbios_name,
+    [Parameter(ValuefromPipeline=$true,Mandatory=$true)] [string]$safemode_admin_pswd,
+    [Parameter(ValuefromPipeline=$true,Mandatory=$true)] [string]$domain_admin_user,
+    [Parameter(ValuefromPipeline=$true,Mandatory=$true)] [string]$domain_admin_pswd
 )
 
 # Convert the safe mode administrator password to a secure string
 $safe_admin_pswd = ConvertTo-SecureString $safemode_admin_pswd -AsPlainText -Force
+$domo_admin_pswd = ConvertTo-SecureString $domain_admin_pswd -AsPlainText -Force
+$domainCredential = New-Object System.Management.Automation.PSCredential ($domain_admin_user, $domo_admin_pswd)
 
 # Create directories for setup if they do not exist
 foreach ($path in @("$env:SystemDrive\BUILD\Content", "$env:SystemDrive\BUILD\Logs", "$env:SystemDrive\BUILD\Scripts")) {
@@ -54,7 +59,14 @@ Install-WindowsFeature -Name RSAT-DNS-Server -Verbose
 Import-Module -Name DnsServer -Verbose
 
 # Add the server as an additional domain controller
-Install-ADDSDomainController -DomainName $domain_name -InstallDns -SafeModeAdministratorPassword $safe_admin_pswd -NoRebootOnCompletion:$true -LogPath 'C:\BUILD\02-DCPromo.log' -Confirm:$false -Force -Verbose
+Install-ADDSDomainController `
+    -DomainName $domain_name `
+    -Credential $domainCredential `
+    -SafeModeAdministratorPassword $safe_admin_pswd `
+    -InstallDns `
+    -NoRebootOnCompletionInstall `
+    -Force `
+    -Verbose
 
 # Disable NLA for Terminal Server (RDP) user authentication setting
 Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Value 0
