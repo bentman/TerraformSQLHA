@@ -32,7 +32,7 @@ $dn_path = ($split_domain | ForEach-Object { "DC=$_" }) -join ","
 if (!(Test-Path -Path 'C:\BUILD\Logs\')) { New-Item -Path 'C:\BUILD\Logs\' -ItemType Directory -Force }
 
 # Start logging
-Start-Transcript -Path 'C:\BUILD\Logs\transcript-Add_DomainUsers.log' -Force
+Start-Transcript -Path 'C:\BUILD\Logs\transcript-Add_DomainAccounts.log' -Force
 
 # Import the Active Directory module
 Import-Module ActiveDirectory

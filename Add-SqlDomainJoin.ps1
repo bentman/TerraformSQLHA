@@ -28,7 +28,7 @@ param (
 if (!(Test-Path -Path 'C:\BUILD\Logs\')) { New-Item -Path 'C:\BUILD\Logs\' -ItemType Directory -Force }
 
 # Start logging the process
-Start-Transcript -Path 'C:\BUILD\Logs\transcript_Join-SQLToDomain.log' -Force
+Start-Transcript -Path 'C:\BUILD\Logs\transcript_Add-SqlDomainJoin.log' -Force
 
 # Convert the domain admin password to a secure string
 $domainPswd = ConvertTo-SecureString $domain_admin_pswd -AsPlainText -Force
