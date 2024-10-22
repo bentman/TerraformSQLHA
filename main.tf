@@ -414,12 +414,12 @@ resource "azurerm_windows_virtual_machine" "addc_vm" {
   count               = length(var.regions)
   name                = lower("${var.shortregions[count.index]}-addc-vm")
   computer_name       = upper("${var.shortregions[count.index]}-addc")
-  location            = var.regions[count.index]
   resource_group_name = azurerm_resource_group.rg[count.index].name
+  location            = var.regions[count.index]
+  size                = var.vm_addc_size
   admin_username      = var.domain_admin_user
   admin_password      = var.domain_admin_pswd
   provision_vm_agent  = true
-  size                = var.vm_addc_size
   tags                = var.labtags
   network_interface_ids = [
     azurerm_network_interface.addc_nic[count.index].id
@@ -683,11 +683,12 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   count               = length(var.regions) * 2
   name                = lower("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-vm")
   computer_name       = upper("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}")
-  location            = var.regions[floor(count.index / 2)]
   resource_group_name = azurerm_resource_group.rg[floor(count.index / 2)].name
+  location            = var.regions[floor(count.index / 2)]
+  zone                = tostring((count.index % 2) + 1)
+  size                = var.vm_sqlha_size
   admin_username      = var.sql_localadmin_user
   admin_password      = var.sql_localadmin_pswd
-  size                = "Standard_D2s_v3"
   tags                = var.labtags
   network_interface_ids = [
     azurerm_network_interface.sqlha_nic[count.index].id

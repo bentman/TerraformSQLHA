@@ -24,8 +24,8 @@ labtags = {
 address_spaces = ["10.1.0.0/24", "10.2.0.0/24"] // defaults to '["10.1.0.0/24", "10.2.0.0/24"]'
 
 ########## VM VALUES
-vm_addc_size     = "Standard_B2s_v2"       // vm addc size
-vm_sqlha_size    = "Standard_D2s_v4"       // vm sqlha size
+vm_addc_size     = "Standard_B2s_v2"       // vm addc size 'Standard_B2s_v2'
+vm_sqlha_size    = "Standard_D2s_v4"       // vm sqlha size 'Standard_D2s_v4'
 sql_disk_data    = 90                      // GB SQL Disk - Data
 sql_disk_logs    = 60                      // GB SQL Disk - Logs
 sql_disk_temp    = 30                      // GB SQL Disk - Temp
