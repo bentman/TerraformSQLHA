@@ -7,7 +7,7 @@ locals {
 }
 
 #################### MAIN ####################
-# Create a resource group in each resion
+# Create a resource group in each region
 resource "azurerm_resource_group" "rg" {
   count    = length(var.regions)
   name     = lower("rg-multiregion-${var.shortregions[count.index]}")
@@ -186,42 +186,15 @@ resource "azurerm_subnet_network_security_group_association" "nsg_association_cl
   network_security_group_id = azurerm_network_security_group.nsg[1].id
 }
 
-#################### ROUTE TABLE AND ROUTES ####################
-# Create Route Table for each region
-resource "azurerm_route_table" "route_table" {
-  count               = length(var.regions)
-  name                = "${var.shortregions[count.index]}-route-table"
-  location            = var.regions[count.index]
-  resource_group_name = azurerm_resource_group.rg[count.index].name
-  tags                = var.labtags
-  depends_on = [
-    azurerm_virtual_network.vnet[0],
-    azurerm_virtual_network.vnet[1]
-  ]
-}
-
-# Create a route to the Internet for each Route Table
-resource "azurerm_route" "route_to_internet" {
-  count               = length(var.regions)
-  name                = "${var.shortregions[count.index]}-route-to-internet"
-  resource_group_name = azurerm_resource_group.rg[count.index].name
-  route_table_name    = azurerm_route_table.route_table[count.index].name
-  address_prefix      = "0.0.0.0/0"
-  next_hop_type       = "Internet"
-  depends_on = [
-    azurerm_virtual_network.vnet[0],
-    azurerm_virtual_network.vnet[1]
-  ]
-}
-
 #################### PUBLIC IP AND NAT GATEWAY ####################
-# Create Public IP for NAT Gateway in each region
+# Create a single Public IP per region for NAT Gateway
 resource "azurerm_public_ip" "gateway_ip" {
   count               = length(var.regions)
-  name                = "${var.shortregions[count.index]}-gateway-ip"
+  name                = "${var.shortregions[count.index]}-nat-gateway-ip"
   location            = var.regions[count.index]
   resource_group_name = azurerm_resource_group.rg[count.index].name
   allocation_method   = "Static"
+  sku                 = "Standard"
   tags                = var.labtags
 }
 
@@ -231,24 +204,71 @@ resource "azurerm_nat_gateway" "nat_gateway" {
   name                = "${var.shortregions[count.index]}-nat-gateway"
   location            = var.regions[count.index]
   resource_group_name = azurerm_resource_group.rg[count.index].name
+  sku_name            = "Standard"
   tags                = var.labtags
+}
+
+# Associate Public IP with NAT Gateway
+resource "azurerm_nat_gateway_public_ip_association" "main" {
+  count                = length(var.regions)
+  nat_gateway_id       = azurerm_nat_gateway.nat_gateway[count.index].id
+  public_ip_address_id = azurerm_public_ip.gateway_ip[count.index].id
+
   depends_on = [
+    azurerm_nat_gateway.nat_gateway,
     azurerm_public_ip.gateway_ip
   ]
 }
 
-# Associate NAT Gateway with the Gateway Subnets
-resource "azurerm_subnet_nat_gateway_association" "nat_association" {
-  count          = length(var.regions)
-  subnet_id      = azurerm_subnet.snet_gw[count.index].id
-  nat_gateway_id = azurerm_nat_gateway.nat_gateway[count.index].id
+#################### ROUTE TABLES AND ROUTES ####################
+# Create Route Table for each region
+resource "azurerm_route_table" "route_table" {
+  count               = length(var.regions)
+  name                = "${var.shortregions[count.index]}-route-table"
+  location            = var.regions[count.index]
+  resource_group_name = azurerm_resource_group.rg[count.index].name
+  tags                = var.labtags
+}
+
+# Create a route to direct internet-bound traffic through NAT Gateway
+resource "azurerm_route" "route_to_nat" {
+  count               = length(var.regions)
+  name                = "${var.shortregions[count.index]}-route-to-internet"
+  resource_group_name = azurerm_resource_group.rg[count.index].name
+  route_table_name    = azurerm_route_table.route_table[count.index].name
+  address_prefix      = "0.0.0.0/0"
+  next_hop_type       = "Internet"
+
   depends_on = [
     azurerm_nat_gateway.nat_gateway,
   ]
 }
 
+#################### SUBNET ASSOCIATIONS ####################
+# Associate NAT Gateway with Gateway Subnets
+resource "azurerm_subnet_nat_gateway_association" "nat_association" {
+  count          = length(var.regions)
+  subnet_id      = azurerm_subnet.snet_gw[count.index].id
+  nat_gateway_id = azurerm_nat_gateway.nat_gateway[count.index].id
+
+  depends_on = [
+    azurerm_nat_gateway.nat_gateway,
+  ]
+}
+
+# Associate Route Tables with Gateway Subnets
+resource "azurerm_subnet_route_table_association" "route_table_association" {
+  count          = length(var.regions)
+  subnet_id      = azurerm_subnet.snet_gw[count.index].id
+  route_table_id = azurerm_route_table.route_table[count.index].id
+
+  depends_on = [
+    azurerm_route_table.route_table,
+  ]
+}
+
 #################### VIRTUAL NETWORK PEERING ####################
-# Create VNet peering from the first region to the second region
+# Create VNet peering from first region to second region
 resource "azurerm_virtual_network_peering" "peering1" {
   name                         = "${var.shortregions[0]}-peering-to-${var.shortregions[1]}"
   resource_group_name          = azurerm_resource_group.rg[0].name
@@ -257,13 +277,14 @@ resource "azurerm_virtual_network_peering" "peering1" {
   allow_virtual_network_access = true
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
+
   depends_on = [
     azurerm_virtual_network.vnet[0],
     azurerm_virtual_network.vnet[1],
   ]
 }
 
-# Create VNet peering from the second region to the first region
+# Create VNet peering from second region to first region
 resource "azurerm_virtual_network_peering" "peering2" {
   name                         = "${var.shortregions[1]}-peering-to-${var.shortregions[0]}"
   resource_group_name          = azurerm_resource_group.rg[1].name
@@ -272,6 +293,7 @@ resource "azurerm_virtual_network_peering" "peering2" {
   allow_virtual_network_access = true
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
+
   depends_on = [
     azurerm_virtual_network.vnet[1],
     azurerm_virtual_network.vnet[0],
@@ -805,7 +827,7 @@ resource "azurerm_virtual_machine_run_command" "sql_domainjoin_script_exec" {
 }
 
 # Ensure the SQL VMs are stable after domain join
-resource "time_sleep" "sqlha_domainjoin_wait" {
+resource "time_sleep" "sqlha_domainjoin_script_wait" {
   create_duration = "1m"
   depends_on = [
     azurerm_virtual_machine_run_command.sql_domainjoin_script_exec,
@@ -822,7 +844,7 @@ resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
   depends_on = [
-    time_sleep.sqlha_domainjoin_wait,
+    time_sleep.sqlha_domainjoin_script_wait,
   ]
 }
 
