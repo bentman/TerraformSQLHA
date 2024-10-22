@@ -1,12 +1,13 @@
 #################### LOCALS ####################
+# Generate locals for domain join parameters
 locals {
-  # Generate locals for domain join parameters
   split_domain    = split(".", var.domain_name)
   dn_path         = join(",", [for dc in local.split_domain : "DC=${dc}"])
   servers_ou_path = "OU=Servers,${join(",", [for dc in local.split_domain : "DC=${dc}"])}"
 }
 
 #################### MAIN ####################
+# Create a resource group in each resion
 resource "azurerm_resource_group" "rg" {
   count    = length(var.regions)
   name     = lower("rg-multiregion-${var.shortregions[count.index]}")
@@ -263,7 +264,6 @@ resource "azurerm_lb" "sqlha_lb" {
   resource_group_name = azurerm_resource_group.rg[count.index].name
   sku                 = "Standard"
   tags                = var.labtags
-
   frontend_ip_configuration {
     name                          = "${var.shortregions[count.index]}-sqlha-frontend"
     subnet_id                     = azurerm_subnet.snet_db[count.index].id
@@ -281,10 +281,6 @@ resource "azurerm_lb_probe" "sqlha_probe" {
   port                = 5999
   interval_in_seconds = 5
   number_of_probes    = 2
-
-  depends_on = [
-    azurerm_lb.sqlha_lb,
-  ]
 }
 
 # Load Balancer rule for SQL listener
@@ -298,10 +294,6 @@ resource "azurerm_lb_rule" "sqlha_lb_rule" {
   frontend_ip_configuration_name = "${var.shortregions[count.index]}-sqlha-frontend"
   backend_address_pool_ids       = [azurerm_lb_backend_address_pool.sqlha_backend_pool[count.index].id]
   probe_id                       = azurerm_lb_probe.sqlha_probe[count.index].id
-
-  depends_on = [
-    azurerm_lb.sqlha_lb,
-  ]
 }
 
 # Backend address pool for Load Balancer
@@ -309,10 +301,6 @@ resource "azurerm_lb_backend_address_pool" "sqlha_backend_pool" {
   count           = length(var.regions)
   name            = "${var.shortregions[count.index]}-sqlha-backend-pool"
   loadbalancer_id = azurerm_lb.sqlha_lb[count.index].id
-
-  depends_on = [
-    azurerm_lb.sqlha_lb,
-  ]
 }
 
 ########## CREATE STORAGE FOR SQLHA ##########
@@ -336,10 +324,6 @@ resource "azurerm_storage_container" "sqlha_quorum" {
   name                  = lower("${var.shortregions[count.index]}sqlquorum")
   storage_account_name  = azurerm_storage_account.sqlha_witness[count.index].name
   container_access_type = "private"
-
-  depends_on = [
-    azurerm_storage_account.sqlha_witness,
-  ]
 }
 
 #################### ADD ADDC ####################
@@ -361,7 +345,6 @@ resource "azurerm_network_interface" "addc_nic" {
   resource_group_name            = azurerm_resource_group.rg[count.index].name
   tags                           = var.labtags
   accelerated_networking_enabled = true
-
   ip_configuration {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.snet_addc[count.index].id
@@ -393,29 +376,24 @@ resource "azurerm_windows_virtual_machine" "addc_vm" {
   provision_vm_agent  = true
   size                = var.vm_addc_size
   tags                = var.labtags
-
   network_interface_ids = [
     azurerm_network_interface.addc_nic[count.index].id
   ]
-
   os_disk {
     name                 = "${var.shortregions[count.index]}-addc-os-disk"
     caching              = "ReadWrite"
     storage_account_type = "Standard_LRS"
     disk_size_gb         = 127
   }
-
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
     offer     = "WindowsServer"
     sku       = "2022-Datacenter"
     version   = "latest"
   }
-
   winrm_listener {
     protocol = "Http"
   }
-
   identity {
     type = "SystemAssigned"
   }
@@ -430,7 +408,6 @@ resource "azurerm_virtual_machine_extension" "install_openssh_addc" {
   type                       = "WindowsOpenSSH"
   type_handler_version       = "3.0"
   auto_upgrade_minor_version = true
-
   depends_on = [
     azurerm_windows_virtual_machine.addc_vm
   ]
@@ -490,7 +467,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart" {
 
 # Wait for the VM to restart after domain promotion
 resource "time_sleep" "addc_vm_restart_wait" {
-  create_duration = "15m"
+  create_duration = "10m"
   depends_on = [
     azurerm_virtual_machine_run_command.addc_vm_restart,
   ]
@@ -550,7 +527,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart_second" {
 
 # Wait for the second VM to restart after domain controller promotion
 resource "time_sleep" "addc_vm_restart_wait_second" {
-  create_duration = "15m"
+  create_duration = "10m"
   depends_on = [
     azurerm_virtual_machine_run_command.addc_vm_restart_second,
   ]
@@ -636,7 +613,6 @@ resource "azurerm_network_interface" "sqlha_nic" {
   resource_group_name            = azurerm_resource_group.rg[floor(count.index / 2)].name
   accelerated_networking_enabled = true
   tags                           = var.labtags
-
   ip_configuration {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.snet_db[floor(count.index / 2)].id
@@ -645,12 +621,10 @@ resource "azurerm_network_interface" "sqlha_nic" {
     primary                       = true
     public_ip_address_id          = azurerm_public_ip.sqlha_public_ip[count.index].id
   }
-
   dns_servers = [
     cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5), # First DC's IP
     cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5), # Second DC's IP
   ]
-
   depends_on = [
     azurerm_public_ip.sqlha_public_ip,
   ]
@@ -667,29 +641,24 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   admin_password      = var.sql_localadmin_pswd
   size                = "Standard_D2s_v3"
   tags                = var.labtags
-
   network_interface_ids = [
     azurerm_network_interface.sqlha_nic[count.index].id
   ]
-
   os_disk {
     name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-os-disk"
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
     disk_size_gb         = 127
   }
-
   source_image_reference {
     publisher = "MicrosoftSQLServer"
     offer     = "SQL2019-WS2022"
     sku       = "Enterprise"
     version   = "latest"
   }
-
   winrm_listener {
     protocol = "Http"
   }
-
   identity {
     type = "SystemAssigned"
   }
@@ -704,7 +673,6 @@ resource "azurerm_virtual_machine_extension" "install_openssh_sql" {
   type                       = "WindowsOpenSSH"
   type_handler_version       = "3.0"
   auto_upgrade_minor_version = true
-
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
   ]
@@ -721,7 +689,6 @@ resource "azurerm_managed_disk" "sqlha_data" {
   create_option        = "Empty"
   disk_size_gb         = 90
   tags                 = var.labtags
-
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
   ]
@@ -737,7 +704,6 @@ resource "azurerm_managed_disk" "sqlha_logs" {
   create_option        = "Empty"
   disk_size_gb         = 60
   tags                 = var.labtags
-
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
     azurerm_managed_disk.sqlha_data,
@@ -754,7 +720,6 @@ resource "azurerm_managed_disk" "sqlha_temp" {
   create_option        = "Empty"
   disk_size_gb         = 30
   tags                 = var.labtags
-
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
     azurerm_managed_disk.sqlha_logs,
@@ -764,17 +729,14 @@ resource "azurerm_managed_disk" "sqlha_temp" {
 # Data Disk Attachments for SQLHA VMs
 resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_attachments" {
   count = length(var.regions) * 2 * 3
-
   managed_disk_id = (
     count.index % 3 == 0 ? azurerm_managed_disk.sqlha_data[floor(count.index / 3)].id :
     count.index % 3 == 1 ? azurerm_managed_disk.sqlha_logs[floor(count.index / 3)].id :
     azurerm_managed_disk.sqlha_temp[floor(count.index / 3)].id
   )
-
   virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[floor(count.index / 3)].id
   lun                = count.index % 3
   caching            = count.index % 3 == 0 ? "ReadWrite" : count.index % 3 == 1 ? "ReadOnly" : "None"
-
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
     azurerm_managed_disk.sqlha_temp,
@@ -815,7 +777,7 @@ resource "null_resource" "sql_domainjoin_script_exec" {
   }
   provisioner "remote-exec" {
     inline = [
-      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlLocalAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user}"
+      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlDomainJoin.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -domain_admin_user ${var.domain_admin_user} -domain_admin_pswd ${var.domain_admin_pswd}"
     ]
   }
   depends_on = [
@@ -836,7 +798,6 @@ resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
     null_resource.sql_domainjoin_script_exec,
   ]
 }
-
 
 # Wait for ALL SQL VMs to restart after domain join
 resource "time_sleep" "sqlha_domainjoin_wait" {
@@ -943,12 +904,10 @@ resource "time_sleep" "sqlha_final_wait" {
 ########## ASSOCIATE SQL SERVERS TO LOAD BALANCER BACKEND ##########
 # Network interface backend address pool association for SQL VMs
 resource "azurerm_network_interface_backend_address_pool_association" "sqlha_nic_lb_association" {
-  count = length(azurerm_network_interface.sqlha_nic)
-
+  count                   = length(azurerm_network_interface.sqlha_nic)
   network_interface_id    = azurerm_network_interface.sqlha_nic[count.index].id
   ip_configuration_name   = "internal"
   backend_address_pool_id = azurerm_lb_backend_address_pool.sqlha_backend_pool[floor(count.index / 2)].id
-
   depends_on = [
     time_sleep.sqlha_final_wait,
   ]
@@ -963,7 +922,6 @@ resource "azurerm_mssql_virtual_machine_group" "sqlha_vmg" {
   sql_image_offer     = var.sql_image_offer
   sql_image_sku       = var.sql_image_sku
   tags                = var.labtags
-
   wsfc_domain_profile {
     fqdn                           = var.domain_name
     cluster_subnet_type            = "MultiSubnet"
@@ -974,7 +932,6 @@ resource "azurerm_mssql_virtual_machine_group" "sqlha_vmg" {
     storage_account_url            = azurerm_storage_account.sqlha_witness[count.index].primary_blob_endpoint
     storage_account_primary_key    = azurerm_storage_account.sqlha_witness[count.index].primary_access_key
   }
-
   depends_on = [
     azurerm_network_interface_backend_address_pool_association.sqlha_nic_lb_association,
   ]
@@ -983,7 +940,6 @@ resource "azurerm_mssql_virtual_machine_group" "sqlha_vmg" {
 # Wait for SQL VM Groups creation
 resource "time_sleep" "sqlha_vmg_wait" {
   create_duration = "5m"
-
   depends_on = [
     azurerm_mssql_virtual_machine_group.sqlha_vmg,
   ]
@@ -999,13 +955,11 @@ resource "azurerm_mssql_virtual_machine" "az_sqlha" {
   sql_connectivity_port        = 1433
   sql_connectivity_type        = "PRIVATE"
   tags                         = var.labtags
-
   wsfc_domain_credential {
     cluster_bootstrap_account_password = var.sql_svc_acct_pswd
     cluster_operator_account_password  = var.sql_svc_acct_pswd
     sql_service_account_password       = var.sql_svc_acct_pswd
   }
-
   storage_configuration {
     disk_type             = "NEW"
     storage_workload_type = "GENERAL"
@@ -1022,13 +976,11 @@ resource "azurerm_mssql_virtual_machine" "az_sqlha" {
       luns              = [2]
     }
   }
-
   timeouts {
     create = "1h"
     update = "1h"
     delete = "1h"
   }
-
   depends_on = [
     time_sleep.sqlha_vmg_wait,
   ]
@@ -1037,7 +989,6 @@ resource "azurerm_mssql_virtual_machine" "az_sqlha" {
 # Wait for MSSQL VMs initialization
 resource "time_sleep" "sqlha_mssqlvm_wait" {
   create_duration = "5m"
-
   depends_on = [
     azurerm_mssql_virtual_machine.az_sqlha,
   ]
@@ -1046,13 +997,11 @@ resource "time_sleep" "sqlha_mssqlvm_wait" {
 ########## SET ACLS FOR VMG ACCESS OVER THE SERVERS OU ##########
 resource "null_resource" "add_sql_acl_clusters" {
   count = 1 # Run once for both regions
-
   triggers = {
     sqlcluster_region1 = azurerm_mssql_virtual_machine_group.sqlha_vmg[0].name
     sqlcluster_region2 = azurerm_mssql_virtual_machine_group.sqlha_vmg[1].name
     sql_vms            = join(",", [for vm in azurerm_mssql_virtual_machine.az_sqlha : vm.virtual_machine_id])
   }
-
   provisioner "remote-exec" {
     connection {
       type            = "ssh"
@@ -1062,12 +1011,10 @@ resource "null_resource" "add_sql_acl_clusters" {
       target_platform = "windows"
       timeout         = "10m"
     }
-
     inline = [
       "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlAcl.ps1 -domain_name ${var.domain_name} -sqlcluster_region1 ${azurerm_mssql_virtual_machine_group.sqlha_vmg[0].name} -sqlcluster_region2 ${azurerm_mssql_virtual_machine_group.sqlha_vmg[1].name}"
     ]
   }
-
   depends_on = [
     azurerm_mssql_virtual_machine.az_sqlha,
   ]
