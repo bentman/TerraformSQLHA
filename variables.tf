@@ -1,9 +1,8 @@
-#################### VARIABLES ####################
-########## SECRETS VARIABLES 
+#################### SECRETS ####################
 #####  Declare confidential variables here
 #####  Store secret values in *.tfvars file
 #####  Check .gitignore in repo for details
-########## SECRETS VARIABLES 
+########## SECRETS 
 variable "arm_tenant_id" {
   description = "Azure Tenant ID"
   type        = string
@@ -28,6 +27,7 @@ variable "arm_client_secret" {
   sensitive   = true
 }
 
+#################### VARIABLES ####################
 ########## RESOURCE VARS 
 variable "regions" {
   description = "Azure Regions to provision resources"
@@ -199,21 +199,21 @@ variable "sql_cluster_name" {
 }
 
 variable "sqldatafilepath" {
+  description = "(Required) The SQL Server default data path"
   type        = string
   default     = "K:\\Data"
-  description = "(Required) The SQL Server default data path"
 }
 
 variable "sqllogfilepath" {
+  description = "(Required) The SQL Server default log path"
   type        = string
   default     = "L:\\Logs"
-  description = "(Required) The SQL Server default log path"
 }
 
 variable "sqltempfilepath" {
+  description = "(Required) The SQL Server default temp path"
   type        = string
   default     = "T:\\Temp"
-  description = "(Required) The SQL Server default temp path"
 }
 
 variable "sql_image_offer" {

@@ -1,9 +1,8 @@
-#################### VALUES ####################
-########## SECRET VALUES ##########
+#################### SECRETS ####################
 #####  Declare confidential variables here
 #####  Store secret values in *.tfvars file
 #####  Check .gitignore in repo for details
-########## SECRET VALUES ##########
+########## SECRETS
 arm_tenant_id          = "YourTenantId"               // azure tenant id
 arm_subscription_id    = "YourSubscriptionId"         // azure subscription id
 arm_client_id          = "YourServicePrincipalId"     // azure service principal id
@@ -11,6 +10,7 @@ arm_client_secret      = "YourServicePrincipalSecret" // azure service principal
 vm_localadmin_username = "YourAdminUsername"          // vm local admin username 'localadmin'
 vm_localadmin_password = "YourAdminPassword"          // vm local admin password 'P@ssw0rd!234'
 
+#################### VALUES ####################
 ########## RESOURCE VALUES
 regions      = ["westus", "eastus"] // defaults to '["westus", "eastus"]'
 shortregions = ["usw", "use"]       // defaults to '["usw", "use"]'
