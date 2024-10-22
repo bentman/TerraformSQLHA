@@ -64,16 +64,18 @@ Install-ADDSDomainController `
     -Credential $domainCred `
     -SafeModeAdministratorPassword $safe_admin_pswd `
     -InstallDns `
-    -NoRebootOnCompletion `
-    -Force `
-    -Verbose
-
-# Disable NLA for Terminal Server (RDP) user authentication setting
-Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Value 0
+    -NoRebootOnCompletion:$true `
+    -LogPath 'C:\BUILD\02-DCPromo.log' `
+    -Confirm:$false -Force -Verbose
 
 # Disable the firewall for the Domain profile
 Set-NetFirewallProfile -Profile Domain -Enabled:false
+
+# Allow SSH through firewall
 New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 -Profile Any
+
+# Disable NLA for Terminal Server (RDP) user authentication setting
+Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Value 0
 
 # Disable the Azure Arc Setup feature
 Disable-WindowsOptionalFeature -Online -FeatureName AzureArcSetup -NoRestart -LogPath 'c:\BUILD\disableAzureArcSetup.log' -Verbose

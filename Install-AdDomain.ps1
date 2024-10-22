@@ -57,14 +57,23 @@ Install-WindowsFeature -Name RSAT-DNS-Server -Verbose
 Import-Module -Name DnsServer -Verbose
 
 # Install a new AD DS forest
-Install-ADDSForest -DomainName $domain_name -DomainNetBiosName $domain_netbios_name -InstallDns -SafeModeAdministratorPassword $safe_admin_pswd -NoRebootOnCompletion:$true -LogPath 'C:\BUILD\01-DCPromo.log' -Confirm:$false -Force -Verbose
-
-# Disable NLA for Terminal Server (RDP) user authentication setting
-Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Value 0
+Install-ADDSForest `
+    -DomainName $domain_name `
+    -DomainNetBiosName $domain_netbios_name `
+    -SafeModeAdministratorPassword $safe_admin_pswd `
+    -InstallDns `
+    -NoRebootOnCompletion:$true `
+    -LogPath 'C:\BUILD\01-DCPromo.log' `
+    -Confirm:$false -Force -Verbose
 
 # Disable the firewall for the Domain profile
 Set-NetFirewallProfile -Profile Domain -Enabled:false
+
+# Allow SSH through firewall
 New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 -Profile Any
+
+# Disable NLA for Terminal Server (RDP) user authentication setting
+Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Value 0
 
 # Disable the Azure Arc Setup feature
 Disable-WindowsOptionalFeature -Online -FeatureName AzureArcSetup -NoRestart -LogPath 'c:\BUILD\disableAzureArcSetup.log' -Verbose
