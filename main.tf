@@ -24,6 +24,9 @@ resource "azurerm_virtual_network" "vnet" {
   resource_group_name = azurerm_resource_group.rg[count.index].name
   address_space       = [var.address_spaces[count.index]]
   tags                = var.labtags
+  depends_on = [
+    azurerm_resource_group.rg,
+  ]
 }
 
 # Create Gateway Subnet within each Virtual Network
@@ -191,6 +194,10 @@ resource "azurerm_route_table" "route_table" {
   location            = var.regions[count.index]
   resource_group_name = azurerm_resource_group.rg[count.index].name
   tags                = var.labtags
+  depends_on = [
+    azurerm_virtual_network.vnet[0],
+    azurerm_virtual_network.vnet[1]
+  ]
 }
 
 # Create a route to the Internet for each Route Table
@@ -201,6 +208,10 @@ resource "azurerm_route" "route_to_internet" {
   route_table_name    = azurerm_route_table.route_table[count.index].name
   address_prefix      = "0.0.0.0/0"
   next_hop_type       = "Internet"
+  depends_on = [
+    azurerm_virtual_network.vnet[0],
+    azurerm_virtual_network.vnet[1]
+  ]
 }
 
 #################### PUBLIC IP AND NAT GATEWAY ####################
@@ -221,13 +232,19 @@ resource "azurerm_nat_gateway" "nat_gateway" {
   location            = var.regions[count.index]
   resource_group_name = azurerm_resource_group.rg[count.index].name
   tags                = var.labtags
+  depends_on = [
+    azurerm_public_ip.gateway_ip
+  ]
 }
 
-# Associate NAT Gateway with the Active Directory Domain Controllers (ADDC) Subnet
+# Associate NAT Gateway with the Gateway Subnets
 resource "azurerm_subnet_nat_gateway_association" "nat_association" {
   count          = length(var.regions)
   subnet_id      = azurerm_subnet.snet_gw[count.index].id
   nat_gateway_id = azurerm_nat_gateway.nat_gateway[count.index].id
+  depends_on = [
+    azurerm_nat_gateway.nat_gateway,
+  ]
 }
 
 #################### VIRTUAL NETWORK PEERING ####################
@@ -241,8 +258,8 @@ resource "azurerm_virtual_network_peering" "peering1" {
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
   depends_on = [
-    azurerm_virtual_network.vnet[0], 
-    azurerm_virtual_network.vnet[1]
+    azurerm_virtual_network.vnet[0],
+    azurerm_virtual_network.vnet[1],
   ]
 }
 
@@ -256,8 +273,8 @@ resource "azurerm_virtual_network_peering" "peering2" {
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
   depends_on = [
-    azurerm_virtual_network.vnet[0], 
-    azurerm_virtual_network.vnet[1]
+    azurerm_virtual_network.vnet[1],
+    azurerm_virtual_network.vnet[0],
   ]
 }
 
@@ -895,7 +912,7 @@ resource "null_resource" "add_sqlsysadmins_exec" {
     ]
   }
   depends_on = [
-    null_resource.add_sqllocaladmins_exec,
+    null_resource.sql_sysadmin_script_copy,
   ]
 }
 
@@ -992,7 +1009,7 @@ resource "azurerm_mssql_virtual_machine" "az_sqlha" {
   ]
 }
 
-# Wait for MSSQL VMs initialization
+########## WAIT FOR MSSQL VMs INITIALIZATION ##########
 resource "time_sleep" "sqlha_mssqlvm_wait" {
   create_duration = "5m"
   depends_on = [
@@ -1002,12 +1019,6 @@ resource "time_sleep" "sqlha_mssqlvm_wait" {
 
 ########## SET ACLS FOR VMG ACCESS OVER THE SERVERS OU ##########
 resource "null_resource" "add_sql_acl_clusters" {
-  count = 1 # Run once for both regions
-  triggers = {
-    sqlcluster_region1 = azurerm_mssql_virtual_machine_group.sqlha_vmg[0].name
-    sqlcluster_region2 = azurerm_mssql_virtual_machine_group.sqlha_vmg[1].name
-    sql_vms            = join(",", [for vm in azurerm_mssql_virtual_machine.az_sqlha : vm.virtual_machine_id])
-  }
   provisioner "remote-exec" {
     connection {
       type            = "ssh"
@@ -1022,6 +1033,6 @@ resource "null_resource" "add_sql_acl_clusters" {
     ]
   }
   depends_on = [
-    azurerm_mssql_virtual_machine.az_sqlha,
+    time_sleep.sqlha_mssqlvm_wait,
   ]
 }
