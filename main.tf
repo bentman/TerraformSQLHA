@@ -501,7 +501,7 @@ resource "time_sleep" "setup_domain_wait" {
 
 # Restart the first Active Directory Domain Controller VM after domain promotion
 resource "azurerm_virtual_machine_run_command" "addc_vm_restart" {
-  name               = "RestartCommand"
+  name               = "AddcRestartCommand0"
   location           = var.regions[0]
   virtual_machine_id = azurerm_windows_virtual_machine.addc_vm[0].id
   source {
@@ -563,7 +563,7 @@ resource "time_sleep" "setup_domain_controller_wait" {
 
 # Restart the second Active Directory Domain Controller VM after promotion
 resource "azurerm_virtual_machine_run_command" "addc_vm_restart_second" {
-  name               = "RestartCommand"
+  name               = "AddcRestartCommand1"
   location           = var.regions[1]
   virtual_machine_id = azurerm_windows_virtual_machine.addc_vm[1].id
   source {
@@ -837,7 +837,7 @@ resource "time_sleep" "sqlha_domainjoin_script_wait" {
 # Restart SQL VMs after domain join
 resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
   count              = length(var.regions) * 2
-  name               = "RestartCommand${count.index}"
+  name               = "SqlRestartCommand${count.index}"
   location           = var.regions[floor(count.index / 2)]
   virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
   source {

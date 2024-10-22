@@ -1,18 +1,18 @@
 # **Azure Multi-Region Lab Environment**  
 
-This repository provides a **Terraform configuration** for deploying a **multi-region Azure lab environment**. The infrastructure includes **SQL High Availability (SQLHA)** using **Windows Server Failover Clustering (WSFC)** and **Active Directory Domain Controllers (ADDC)** across two Azure regions.
+This repository provides a **Terraform configuration** for deploying a multi-region Azure lab environment. The infrastructure includes **Active Directory Domain Controllers (ADDC)** and **SQL High Availability (SQLHA)** using **Windows Server Failover Clustering (WSFC)** across two Azure regions.
 
 ---
 
 ## **Overview**  
 
 The lab environment offers:  
-- **Multi-region infrastructure** with deployments across **two Azure regions**.  
-- **Two Resource Groups**: One per region to organize resources.  
-- **Virtual Network setup** with multiple subnets (gateways, domain controllers, applications, databases, and clients).  
-- **Two Active Directory Domain Controllers** (one per region).  
-- **SQLHA** with Always On Availability Groups and load balancers using **‘SingleSubnet’** design.  
-- **Custom scripts**: For domain setup, cluster configuration, and SQL management tasks.
+- **Multi-region infrastructure** Infrastructure deployed across two Azure regions.  
+- **Two Resource Groups** One per region to organize resources.  
+- **Virtual Network** vNet in each region with multiple subnets (gateway, domain controllers, databases, applications, & clients).  
+- **Active Directory Domain Controllers** One ADDC in each region.  
+- **SQL High Availability** SQL Always-On Availability Groups behind load balancers using `SingleSubnet` design.  
+- **Custom scripts** Used for domain setup, cluster configuration, & SQL management tasks.
 
 ---
 
@@ -21,21 +21,21 @@ The lab environment offers:
 1. **Resource Groups**  
    - Two resource groups: One per region to manage resources separately.
 
-2. **Networking Configuration** (now integrated into `main.tf`):  
+2. **Networking Configuration**:  
    - **Virtual Networks**: One vNet per region.  
    - **Subnets**:  
-     - **Gateway Subnet** (`snet_gw`): For VPN/NAT gateways.  
+     - **Gateway Subnet** (`snet_gw`): For VPN, NAT gateways, &/or external-facing services.  
      - **ADDC Subnet** (`snet_addc`): For Active Directory Domain Controllers.  
      - **Database Subnet** (`snet_db`): For SQL services.  
      - **Application Subnet** (`snet_app`): For application workloads.  
-     - **Client Subnet** (`snet_client`): For external-facing services.  
-   - **Public IPs**: Static IPs for gateways, SQL servers, and NAT gateways.  
-   - **NAT Gateways**: Provide outbound internet traffic for application and database subnets.  
+     - **Client Subnet** (`snet_client`): For client testing &/or external-facing services.  
+   - **Public IPs**: Static IPs for gateways, SQL servers, & NAT gateways.  
+   - **NSGs**: Define security rules for remote access, internal communication, & outbound traffic.  
+   - **NSG Associations**: Applied to specific subnets for security enforcement.
+   - **NAT Gateways**: Provide outbound internet traffic for application & database subnets.  
    - **Load Balancers**: Manage SQLHA listener traffic across regions.  
    - **Route Tables**: Custom routes for internet access.  
    - **Network Peering**: Enable secure communication between regions.  
-   - **NSGs**: Define security rules for remote access, internal communication, and outbound traffic.  
-   - **NSG Associations**: Applied to specific subnets for security enforcement.
 
 ---
 
