@@ -696,7 +696,7 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   os_disk {
     name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-os-disk"
     caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
+    storage_account_type = "StandardSSD_LRS"
     disk_size_gb         = 127
   }
   source_image_reference {
