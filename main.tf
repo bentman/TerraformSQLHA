@@ -648,6 +648,7 @@ resource "azurerm_public_ip" "sqlha_public_ip" {
   name                = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-public-ip"
   location            = var.regions[floor(count.index / 2)]
   resource_group_name = azurerm_resource_group.rg[floor(count.index / 2)].name
+  zones               = tostring((count.index % 2) + 1)
   allocation_method   = "Static"
   sku                 = "Standard"
   tags                = var.labtags
