@@ -457,21 +457,23 @@ resource "null_resource" "setup_domain_copy" {
 }
 
 # Execute the setup domain script on the first Active Directory Domain Controller VM
-resource "azurerm_virtual_machine_extension" "setup_domain_exec" {
-  name                       = "SetupDomain"
-  virtual_machine_id         = azurerm_windows_virtual_machine.addc_vm[0].id
-  publisher                  = "Microsoft.Compute"
-  type                       = "CustomScriptExtension"
-  type_handler_version       = "1.10"
-  auto_upgrade_minor_version = true
-  tags                       = var.labtags
-  settings                   = <<SETTINGS
-    {
-      "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File c:\\Install-AdDomain.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -safemode_admin_pswd ${var.safemode_admin_pswd}"
-    }
-  SETTINGS
+resource "azurerm_virtual_machine_run_command" "setup_domain_exec" {
+  name               = "SetupDomain"
+  location           = var.regions[0]
+  virtual_machine_id = azurerm_windows_virtual_machine.addc_vm[0].id
+  source {
+    script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File c:\\Install-AdDomain.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -safemode_admin_pswd ${var.safemode_admin_pswd}"
+  }
   depends_on = [
     null_resource.setup_domain_copy,
+  ]
+}
+
+# Ensure the VM is in a stable state before executing the next command
+resource "time_sleep" "setup_domain_wait" {
+  create_duration = "1m"
+  depends_on = [
+    azurerm_virtual_machine_run_command.setup_domain_exec,
   ]
 }
 
@@ -484,7 +486,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart" {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
   depends_on = [
-    azurerm_virtual_machine_extension.setup_domain_exec,
+    time_sleep.setup_domain_wait,
   ]
 }
 
@@ -517,21 +519,23 @@ resource "null_resource" "setup_domain_controller_copy" {
 }
 
 # Execute the setup domain controller script on the second Active Directory Domain Controller VM
-resource "azurerm_virtual_machine_extension" "setup_domain_controller_exec" {
-  name                       = "SetupDomainController"
-  virtual_machine_id         = azurerm_windows_virtual_machine.addc_vm[1].id
-  publisher                  = "Microsoft.Compute"
-  type                       = "CustomScriptExtension"
-  type_handler_version       = "1.10"
-  auto_upgrade_minor_version = true
-  tags                       = var.labtags
-  settings                   = <<SETTINGS
-    {
-      "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Install-AdDomainController.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -safemode_admin_pswd ${var.safemode_admin_pswd} -domain_admin_user ${var.domain_admin_user} -domain_admin_pswd ${var.domain_admin_pswd}"
-    }
-  SETTINGS
+resource "azurerm_virtual_machine_run_command" "setup_domain_controller_exec" {
+  name               = "SetupDomainController"
+  location           = var.regions[1]
+  virtual_machine_id = azurerm_windows_virtual_machine.addc_vm[1].id
+  source {
+    script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Install-AdDomainController.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -safemode_admin_pswd ${var.safemode_admin_pswd} -domain_admin_user ${var.domain_admin_user} -domain_admin_pswd ${var.domain_admin_pswd}"
+  }
   depends_on = [
     null_resource.setup_domain_controller_copy,
+  ]
+}
+
+# Ensure the VM is in a stable state before executing the next command
+resource "time_sleep" "setup_domain_controller_wait" {
+  create_duration = "1m"
+  depends_on = [
+    azurerm_virtual_machine_run_command.setup_domain_controller_exec,
   ]
 }
 
@@ -544,7 +548,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart_second" {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
   depends_on = [
-    azurerm_virtual_machine_extension.setup_domain_controller_exec,
+    time_sleep.setup_domain_controller_wait,
   ]
 }
 
@@ -595,8 +599,7 @@ resource "null_resource" "add_domain_accounts_copy" {
   ]
 }
 
-# Execute the setup domain accounts script on the first Active Directory Domain Controller VM
-# Execute Add-DomainAccounts.ps1 remotely on ADDC VMs
+########## EXECUTE ADD-DOMAINACCOUNTS SCRIPT ON ADDC VMS ##########
 resource "null_resource" "add_domain_accounts_exec" {
   connection {
     type            = "ssh"
@@ -787,44 +790,45 @@ resource "null_resource" "sql_domainjoin_script_copy" {
   ]
 }
 
-# Execute Add-SqlDomainJoin.ps1 script
-resource "null_resource" "sql_domainjoin_script_exec" {
-  count = length(var.regions) * 2
-  connection {
-    type            = "ssh"
-    host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
-    user            = var.sql_localadmin_user
-    password        = var.sql_localadmin_pswd
-    target_platform = "windows"
-    timeout         = "10m"
-  }
-  provisioner "remote-exec" {
-    inline = [
-      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlDomainJoin.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -domain_admin_user ${var.domain_admin_user} -domain_admin_pswd ${var.domain_admin_pswd}"
-    ]
+# Execute Add-SqlDomainJoin.ps1 on SQLHA Virtual Machines
+resource "azurerm_virtual_machine_run_command" "sql_domainjoin_script_exec" {
+  count              = length(var.regions) * 2
+  name               = "SqlDomainJoinCommand${count.index}"
+  location           = var.regions[floor(count.index / 2)]
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
+  source {
+    script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlDomainJoin.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -domain_admin_user ${var.domain_admin_user} -domain_admin_pswd ${var.domain_admin_pswd}"
   }
   depends_on = [
     null_resource.sql_domainjoin_script_copy,
   ]
 }
 
+# Ensure the SQL VMs are stable after domain join
+resource "time_sleep" "sqlha_domainjoin_wait" {
+  create_duration = "1m"
+  depends_on = [
+    azurerm_virtual_machine_run_command.sql_domainjoin_script_exec,
+  ]
+}
+
 # Restart SQL VMs after domain join
 resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
   count              = length(var.regions) * 2
-  name               = "RestartCommand"
+  name               = "RestartCommand${count.index}"
   location           = var.regions[floor(count.index / 2)]
   virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
   source {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
   depends_on = [
-    null_resource.sql_domainjoin_script_exec,
+    time_sleep.sqlha_domainjoin_wait,
   ]
 }
 
 # Wait for ALL SQL VMs to restart after domain join
 resource "time_sleep" "sqlha_domainjoin_wait" {
-  create_duration = "10m"
+  create_duration = "7m"
   depends_on = [
     azurerm_virtual_machine_run_command.sqlha_domainjoin_restart,
   ]
@@ -892,12 +896,17 @@ resource "null_resource" "add_sqllocaladmins_exec" {
   ]
 }
 
+# Ensure stability after adding local admins
+resource "time_sleep" "sqlha_localadmins_wait" {
+  create_duration = "1m"
+  depends_on = [
+    null_resource.add_sqllocaladmins_exec,
+  ]
+}
+
 # Add SQL sysadmins to SQL Servers
 resource "null_resource" "add_sqlsysadmins_exec" {
   count = length(var.regions) * 2
-  triggers = {
-    vm_name = azurerm_windows_virtual_machine.sqlha_vm[count.index].name
-  }
   connection {
     type            = "ssh"
     host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
@@ -912,20 +921,20 @@ resource "null_resource" "add_sqlsysadmins_exec" {
     ]
   }
   depends_on = [
+    time_sleep.sqlha_localadmins_wait,
     null_resource.sql_sysadmin_script_copy,
   ]
 }
 
 # Wait for local admin & sysadmin scripts to complete
 resource "time_sleep" "sqlha_final_wait" {
-  create_duration = "5m"
+  create_duration = "2m"
   depends_on = [
     null_resource.add_sqlsysadmins_exec,
   ]
 }
 
 ########## ASSOCIATE SQL SERVERS TO LOAD BALANCER BACKEND ##########
-# Network interface backend address pool association for SQL VMs
 resource "azurerm_network_interface_backend_address_pool_association" "sqlha_nic_lb_association" {
   count                   = length(azurerm_network_interface.sqlha_nic)
   network_interface_id    = azurerm_network_interface.sqlha_nic[count.index].id
