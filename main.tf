@@ -240,7 +240,10 @@ resource "azurerm_virtual_network_peering" "peering1" {
   allow_virtual_network_access = true
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
-  depends_on                   = [azurerm_virtual_network.vnet]
+  depends_on = [
+    azurerm_virtual_network.vnet[0], 
+    azurerm_virtual_network.vnet[1]
+  ]
 }
 
 # Create VNet peering from the second region to the first region
@@ -252,7 +255,10 @@ resource "azurerm_virtual_network_peering" "peering2" {
   allow_virtual_network_access = true
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
-  depends_on                   = [azurerm_virtual_network.vnet]
+  depends_on = [
+    azurerm_virtual_network.vnet[0], 
+    azurerm_virtual_network.vnet[1]
+  ]
 }
 
 ########## CREATE LOAD BALANCERS FOR SQLHA ##########
