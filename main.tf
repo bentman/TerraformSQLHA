@@ -195,6 +195,7 @@ resource "azurerm_public_ip" "gateway_ip" {
   resource_group_name = azurerm_resource_group.rg[count.index].name
   allocation_method   = "Static"
   sku                 = "Standard"
+  zones               = ["1"]
   tags                = var.labtags
 }
 
@@ -206,6 +207,7 @@ resource "azurerm_nat_gateway" "nat_gateway" {
   resource_group_name = azurerm_resource_group.rg[count.index].name
   sku_name            = "Standard"
   tags                = var.labtags
+  depends_on          = [azurerm_public_ip.gateway_ip]
 }
 
 # Associate Public IP with NAT Gateway
@@ -241,6 +243,7 @@ resource "azurerm_route" "route_to_nat" {
 
   depends_on = [
     azurerm_nat_gateway.nat_gateway,
+    azurerm_nat_gateway_public_ip_association.main
   ]
 }
 
@@ -314,7 +317,8 @@ resource "azurerm_lb" "sqlha_lb" {
     subnet_id                     = azurerm_subnet.snet_db[count.index].id
     private_ip_address_allocation = "Static"
     private_ip_address            = cidrhost(azurerm_subnet.snet_db[count.index].address_prefixes[0], 20)
-    zones                         = null
+    zones                         = ["1"]
+
   }
 }
 
@@ -380,6 +384,7 @@ resource "azurerm_public_ip" "addc_public_ip" {
   location            = var.regions[count.index]
   resource_group_name = azurerm_resource_group.rg[count.index].name
   allocation_method   = "Static"
+  zones               = ["1"]
   tags                = var.labtags
 }
 
@@ -417,6 +422,7 @@ resource "azurerm_windows_virtual_machine" "addc_vm" {
   computer_name       = upper("${var.shortregions[count.index]}-addc")
   resource_group_name = azurerm_resource_group.rg[count.index].name
   location            = var.regions[count.index]
+  zone                = "1"
   size                = var.vm_addc_size
   admin_username      = var.domain_admin_user
   admin_password      = var.domain_admin_pswd
@@ -649,10 +655,10 @@ resource "azurerm_public_ip" "sqlha_public_ip" {
   name                = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-public-ip"
   location            = var.regions[floor(count.index / 2)]
   resource_group_name = azurerm_resource_group.rg[floor(count.index / 2)].name
-  zones               = ["${(count.index % 2) + 1}"]
   allocation_method   = "Static"
   sku                 = "Standard"
   tags                = var.labtags
+  zones               = ["1"]
 }
 
 # Network Interfaces for SQLHA in both regions
@@ -687,7 +693,7 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   computer_name       = upper("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}")
   resource_group_name = azurerm_resource_group.rg[floor(count.index / 2)].name
   location            = var.regions[floor(count.index / 2)]
-  zone                = tostring((count.index % 2) + 1)
+  zone                = "1"
   size                = var.vm_sqlha_size
   admin_username      = var.sql_localadmin_user
   admin_password      = var.sql_localadmin_pswd
@@ -742,6 +748,7 @@ resource "azurerm_managed_disk" "sqlha_data" {
   tags                 = var.labtags
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
+    azurerm_virtual_machine_extension.install_openssh_sql,
   ]
 }
 
