@@ -493,7 +493,7 @@ resource "azurerm_virtual_machine_run_command" "setup_domain_exec" {
 
 # Ensure the VM is in a stable state before executing the next command
 resource "time_sleep" "setup_domain_wait" {
-  create_duration = "1m"
+  create_duration = "2m"
   depends_on = [
     azurerm_virtual_machine_run_command.setup_domain_exec,
   ]
@@ -514,7 +514,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart" {
 
 # Wait for the VM to restart after domain promotion
 resource "time_sleep" "addc_vm_restart_wait" {
-  create_duration = "10m"
+  create_duration = "15m"
   depends_on = [
     azurerm_virtual_machine_run_command.addc_vm_restart,
   ]
@@ -555,7 +555,7 @@ resource "azurerm_virtual_machine_run_command" "setup_domain_controller_exec" {
 
 # Ensure the VM is in a stable state before executing the next command
 resource "time_sleep" "setup_domain_controller_wait" {
-  create_duration = "1m"
+  create_duration = "3m"
   depends_on = [
     azurerm_virtual_machine_run_command.setup_domain_controller_exec,
   ]
@@ -576,7 +576,7 @@ resource "azurerm_virtual_machine_run_command" "addc_vm_restart_second" {
 
 # Wait for the second VM to restart after domain controller promotion
 resource "time_sleep" "addc_vm_restart_wait_second" {
-  create_duration = "10m"
+  create_duration = "15m"
   depends_on = [
     azurerm_virtual_machine_run_command.addc_vm_restart_second,
   ]
@@ -829,7 +829,7 @@ resource "azurerm_virtual_machine_run_command" "sql_domainjoin_script_exec" {
 
 # Ensure the SQL VMs are stable after domain join
 resource "time_sleep" "sqlha_domainjoin_script_wait" {
-  create_duration = "1m"
+  create_duration = "3m"
   depends_on = [
     azurerm_virtual_machine_run_command.sql_domainjoin_script_exec,
   ]
@@ -851,7 +851,7 @@ resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
 
 # Wait for ALL SQL VMs to restart after domain join
 resource "time_sleep" "sqlha_domainjoin_wait" {
-  create_duration = "7m"
+  create_duration = "15m"
   depends_on = [
     azurerm_virtual_machine_run_command.sqlha_domainjoin_restart,
   ]
@@ -921,7 +921,7 @@ resource "null_resource" "add_sqllocaladmins_exec" {
 
 # Ensure stability after adding local admins
 resource "time_sleep" "sqlha_localadmins_wait" {
-  create_duration = "1m"
+  create_duration = "3m"
   depends_on = [
     null_resource.add_sqllocaladmins_exec,
   ]
@@ -951,7 +951,7 @@ resource "null_resource" "add_sqlsysadmins_exec" {
 
 # Wait for local admin & sysadmin scripts to complete
 resource "time_sleep" "sqlha_final_wait" {
-  create_duration = "2m"
+  create_duration = "5m"
   depends_on = [
     null_resource.add_sqlsysadmins_exec,
   ]
@@ -1043,7 +1043,7 @@ resource "azurerm_mssql_virtual_machine" "az_sqlha" {
 
 ########## WAIT FOR MSSQL VMs INITIALIZATION ##########
 resource "time_sleep" "sqlha_mssqlvm_wait" {
-  create_duration = "5m"
+  create_duration = "10m"
   depends_on = [
     azurerm_mssql_virtual_machine.az_sqlha,
   ]
