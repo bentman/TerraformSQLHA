@@ -7,12 +7,12 @@ This repository provides a **Terraform configuration** for deploying a multi-reg
 ## **Overview**  
 
 The lab environment offers:  
-- **Multi-region infrastructure** Infrastructure deployed across two Azure regions.  
-- **Two Resource Groups** One per region to organize resources.  
-- **Virtual Network** vNet in each region with multiple subnets (gateway, domain controllers, databases, applications, & clients).  
-- **Active Directory Domain Controllers** One ADDC in each region.  
-- **SQL High Availability** SQL Always-On Availability Groups behind load balancers using `SingleSubnet` design.  
-- **Custom scripts** Used for domain setup, cluster configuration, & SQL management tasks.
+- **Multi-region infrastructure**: Infrastructure deployed across two Azure regions.  
+- **Two Resource Groups**: One per region to organize resources.  
+- **Virtual Network**: vNet in each region with multiple subnets.  
+- **Active Directory Domain Controllers**: One ADDC in each region.  
+- **SQL High Availability**: SQL Always-On Availability Groups.  
+- **Custom scripts**: Used for domain setup, cluster configuration, & SQL management.
 
 ---
 
@@ -24,12 +24,12 @@ The lab environment offers:
 2. **Networking Configuration**:  
    - **Virtual Networks**: One vNet per region.  
    - **Subnets**:  
-     - **Gateway Subnet** (`snet_gw`): For VPN, NAT gateways, &/or external-facing services.  
+     - **Gateway Subnet** (`snet_gw`): For VPN &/or external-facing services.  
      - **ADDC Subnet** (`snet_addc`): For Active Directory Domain Controllers.  
      - **Database Subnet** (`snet_db`): For SQL services.  
      - **Application Subnet** (`snet_app`): For application workloads.  
      - **Client Subnet** (`snet_client`): For client testing &/or external-facing services.  
-   - **Public IPs**: Static IPs for gateways, SQL servers, & NAT gateways.  
+   - **Public IPs**: Static PIP/IP for ADDC &SQL servers.  
    - **NSGs**: Define security rules for remote access, internal communication, & outbound traffic.  
    - **NSG Associations**: Applied to specific subnets for security enforcement.
    - **NAT Gateways**: Provide outbound internet traffic for application & database subnets.  
@@ -74,6 +74,7 @@ The lab environment offers:
 ## **Prerequisites**
 
 - **Terraform**: v1.6.0 or higher.  
+- **AzureRm**: v4.0 or higher.
 - **Azure Subscription**: With necessary privileges.  
 - **Service Principal**: For authentication with Azure.  
 - **PowerShell**: For executing custom scripts.

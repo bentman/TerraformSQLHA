@@ -45,7 +45,6 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
-
   tenant_id       = var.arm_tenant_id
   subscription_id = var.arm_subscription_id
   client_id       = var.arm_client_id
