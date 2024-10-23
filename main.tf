@@ -1,9 +1,16 @@
 #################### LOCALS ####################
-# Generate locals for domain join parameters
 locals {
+  # Generate locals for domain join parameters
   split_domain    = split(".", var.domain_name)
   dn_path         = join(",", [for dc in local.split_domain : "DC=${dc}"])
   servers_ou_path = "OU=Servers,${join(",", [for dc in local.split_domain : "DC=${dc}"])}"
+  # Define a flat list of region-server pairs
+  region_server_pairs = flatten([
+    for r in var.shortregions : [
+      { region = r, index = 0 },
+      { region = r, index = 1 }
+    ]
+  ])
 }
 
 #################### MAIN ####################
@@ -649,60 +656,57 @@ resource "null_resource" "add_domain_accounts_exec" {
 }
 
 ########## CREATE SQL NODES FOR SQLHA ##########
-# Public IPs for SQLHA in both regions
+# Public IPs for SQLHA
 resource "azurerm_public_ip" "sqlha_public_ip" {
-  count               = length(var.regions) * 2
-  name                = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-public-ip"
-  location            = var.regions[floor(count.index / 2)]
-  resource_group_name = azurerm_resource_group.rg[floor(count.index / 2)].name
+  for_each            = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                = lower("${each.value.region}-sqlha${each.value.index}-public-ip")
+  location            = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
   allocation_method   = "Static"
   sku                 = "Standard"
-  tags                = var.labtags
   zones               = ["1"]
+  tags                = var.labtags
 }
 
-# Network Interfaces for SQLHA in both regions
+# Network Interfaces for SQLHA
 resource "azurerm_network_interface" "sqlha_nic" {
-  count                          = length(var.regions) * 2
-  name                           = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-nic"
-  location                       = var.regions[floor(count.index / 2)]
-  resource_group_name            = azurerm_resource_group.rg[floor(count.index / 2)].name
+  for_each                       = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                           = lower("${each.value.region}-sqlha${each.value.index}-nic")
+  location                       = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name            = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
   accelerated_networking_enabled = true
   tags                           = var.labtags
   ip_configuration {
-    name                          = "internal"
-    subnet_id                     = azurerm_subnet.snet_db[floor(count.index / 2)].id
+    name                          = lower("${each.value.region}-sqlha${each.value.index}-nic-config")
+    subnet_id                     = azurerm_subnet.snet_db[index(var.shortregions, each.value.region)].id
     private_ip_address_allocation = "Static"
-    private_ip_address            = cidrhost(azurerm_subnet.snet_db[floor(count.index / 2)].address_prefixes[0], count.index % 2 == 0 ? 9 : 10)
+    private_ip_address            = cidrhost(azurerm_subnet.snet_db[index(var.shortregions, each.value.region)].address_prefixes[0], each.value.index == 0 ? 9 : 10)
     primary                       = true
-    public_ip_address_id          = azurerm_public_ip.sqlha_public_ip[count.index].id
+    public_ip_address_id          = azurerm_public_ip.sqlha_public_ip[each.key].id
   }
   dns_servers = [
-    cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5), # First DC's IP
-    cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5), # Second DC's IP
-  ]
-  depends_on = [
-    azurerm_public_ip.sqlha_public_ip,
+    cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5),
+    cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5),
   ]
 }
 
-# SQLHA Virtual Machines in both regions
+# SQLHA Virtual Machines
 resource "azurerm_windows_virtual_machine" "sqlha_vm" {
-  count               = length(var.regions) * 2
-  name                = lower("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-vm")
-  computer_name       = upper("${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}")
-  resource_group_name = azurerm_resource_group.rg[floor(count.index / 2)].name
-  location            = var.regions[floor(count.index / 2)]
+  for_each            = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                = lower("${each.value.region}-sqlha${each.value.index}-vm")
+  computer_name       = upper("${each.value.region}-sqlha${each.value.index}")
+  resource_group_name = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
+  location            = var.regions[index(var.shortregions, each.value.region)]
   zone                = "1"
   size                = var.vm_sqlha_size
   admin_username      = var.sql_localadmin_user
   admin_password      = var.sql_localadmin_pswd
   tags                = var.labtags
   network_interface_ids = [
-    azurerm_network_interface.sqlha_nic[count.index].id
+    azurerm_network_interface.sqlha_nic[each.key].id
   ]
   os_disk {
-    name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-os-disk"
+    name                 = lower("${each.value.region}-sqlha${each.value.index}-os-disk")
     caching              = "ReadWrite"
     storage_account_type = "StandardSSD_LRS"
     disk_size_gb         = 127
@@ -721,11 +725,11 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   }
 }
 
-# Install OpenSSH on SQLHA Virtual Machines
+########## INSTALL OPENSSH ON SQLHA VIRTUAL MACHINES ##########
 resource "azurerm_virtual_machine_extension" "install_openssh_sql" {
-  count                      = length(var.regions) * 2
-  name                       = "InstallOpenSSH-sqlha${count.index}"
-  virtual_machine_id         = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
+  for_each                   = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                       = "InstallOpenSSH-${each.value.region}-sqlha${each.value.index}"
+  virtual_machine_id         = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
   publisher                  = "Microsoft.Azure.OpenSSH"
   type                       = "WindowsOpenSSH"
   type_handler_version       = "3.0"
@@ -735,76 +739,58 @@ resource "azurerm_virtual_machine_extension" "install_openssh_sql" {
   ]
 }
 
-########## DATA DISKS FOR SQLHA VMS ##########
-# Data disks for SQLHA VMs
+########## SQL MANAGED DISKS ##########
+# Data Disks for SQLHA VMs
 resource "azurerm_managed_disk" "sqlha_data" {
-  count                = length(var.regions) * 2
-  name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-data-disk"
-  location             = var.regions[floor(count.index / 2)]
-  resource_group_name  = azurerm_resource_group.rg[floor(count.index / 2)].name
+  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                 = "${each.value.region}-sqlha${each.value.index}-data-disk"
+  location             = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
   storage_account_type = "Premium_LRS"
   create_option        = "Empty"
   disk_size_gb         = 90
   tags                 = var.labtags
-  depends_on = [
-    azurerm_windows_virtual_machine.sqlha_vm,
-    azurerm_virtual_machine_extension.install_openssh_sql,
-  ]
 }
 
-# Log disks for SQLHA VMs
 resource "azurerm_managed_disk" "sqlha_logs" {
-  count                = length(var.regions) * 2
-  name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-log-disk"
-  location             = var.regions[floor(count.index / 2)]
-  resource_group_name  = azurerm_resource_group.rg[floor(count.index / 2)].name
+  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                 = "${each.value.region}-sqlha${each.value.index}-log-disk"
+  location             = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
   storage_account_type = "Premium_LRS"
   create_option        = "Empty"
   disk_size_gb         = 60
   tags                 = var.labtags
-  depends_on = [
-    azurerm_windows_virtual_machine.sqlha_vm,
-    azurerm_managed_disk.sqlha_data,
-  ]
 }
 
-# TempDB disks for SQLHA VMs
 resource "azurerm_managed_disk" "sqlha_temp" {
-  count                = length(var.regions) * 2
-  name                 = "${var.shortregions[floor(count.index / 2)]}-sqlha${count.index % 2}-temp-disk"
-  location             = var.regions[floor(count.index / 2)]
-  resource_group_name  = azurerm_resource_group.rg[floor(count.index / 2)].name
+  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                 = "${each.value.region}-sqlha${each.value.index}-temp-disk"
+  location             = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
   storage_account_type = "Premium_LRS"
   create_option        = "Empty"
   disk_size_gb         = 30
   tags                 = var.labtags
-  depends_on = [
-    azurerm_windows_virtual_machine.sqlha_vm,
-    azurerm_managed_disk.sqlha_logs,
-  ]
 }
 
-# Data Disk Attachments for SQLHA VMs
+# Data Disk Attachments
 resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_attachments" {
-  count = length(var.regions) * 2 * 3
-  managed_disk_id = (
-    count.index % 3 == 0 ? azurerm_managed_disk.sqlha_data[floor(count.index / 3)].id :
-    count.index % 3 == 1 ? azurerm_managed_disk.sqlha_logs[floor(count.index / 3)].id :
-    azurerm_managed_disk.sqlha_temp[floor(count.index / 3)].id
-  )
-  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[floor(count.index / 3)].id
-  lun                = count.index % 3
-  caching            = count.index % 3 == 0 ? "ReadWrite" : count.index % 3 == 1 ? "ReadOnly" : "None"
+  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  managed_disk_id    = azurerm_managed_disk.sqlha_data[each.key].id
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
+  lun                = 0
+  caching            = "ReadWrite"
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
     azurerm_managed_disk.sqlha_temp,
   ]
 }
 
-########## DOMAIN JOIN SQLHA NODES ##########
-# Copy Add-SqlDomainJoin.ps1 script
+########## DOMAIN JOIN SQL SERVERS ##########
+# Copy Domain Join Script
 resource "null_resource" "sql_domainjoin_script_copy" {
-  count = length(var.regions) * 2
+  for_each = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
   provisioner "file" {
     source      = "${path.module}/Add-SqlDomainJoin.ps1"
     destination = "C:\\Add-SqlDomainJoin.ps1"
@@ -812,7 +798,7 @@ resource "null_resource" "sql_domainjoin_script_copy" {
       type            = "ssh"
       user            = var.sql_localadmin_user
       password        = var.sql_localadmin_pswd
-      host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
+      host            = azurerm_public_ip.sqlha_public_ip[each.key].ip_address
       target_platform = "windows"
       timeout         = "10m"
     }
@@ -822,12 +808,12 @@ resource "null_resource" "sql_domainjoin_script_copy" {
   ]
 }
 
-# Execute Add-SqlDomainJoin.ps1 on SQLHA Virtual Machines
+# Execute Domain Join Script
 resource "azurerm_virtual_machine_run_command" "sql_domainjoin_script_exec" {
-  count              = length(var.regions) * 2
-  name               = "SqlDomainJoinCommand${count.index}"
-  location           = var.regions[floor(count.index / 2)]
-  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
+  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name               = "SqlDomainJoinCommand-${each.value.region}-${each.value.index}"
+  location           = var.regions[index(var.shortregions, each.value.region)]
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
   source {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlDomainJoin.ps1 -domain_name ${var.domain_name} -domain_netbios_name ${var.domain_netbios_name} -domain_admin_user ${var.domain_admin_user} -domain_admin_pswd ${var.domain_admin_pswd}"
   }
@@ -835,8 +821,7 @@ resource "azurerm_virtual_machine_run_command" "sql_domainjoin_script_exec" {
     null_resource.sql_domainjoin_script_copy,
   ]
 }
-
-# Ensure the SQL VMs are stable after domain join
+# Wait for SQLHA VMs After Domain Join
 resource "time_sleep" "sqlha_domainjoin_script_wait" {
   create_duration = "3m"
   depends_on = [
@@ -844,12 +829,12 @@ resource "time_sleep" "sqlha_domainjoin_script_wait" {
   ]
 }
 
-# Restart SQL VMs after domain join
+# Restart SQLHA VMs After Domain Join
 resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
-  count              = length(var.regions) * 2
-  name               = "SqlRestartCommand${count.index}"
-  location           = var.regions[floor(count.index / 2)]
-  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
+  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name               = "SqlRestartCommand-${each.value.region}-${each.value.index}"
+  location           = var.regions[index(var.shortregions, each.value.region)]
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
   source {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
@@ -858,7 +843,7 @@ resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
   ]
 }
 
-# Wait for ALL SQL VMs to restart after domain join
+# Final Wait After SQLHA VM Restart
 resource "time_sleep" "sqlha_domainjoin_wait" {
   create_duration = "15m"
   depends_on = [
@@ -866,126 +851,30 @@ resource "time_sleep" "sqlha_domainjoin_wait" {
   ]
 }
 
-########## ADD LOCAL ADMINS AND SQL SYSADMINS TO SQL SERVERS ##########
-# Copy Add-SqlLocalAdmins.ps1 script
-resource "null_resource" "sql_localadmin_script_copy" {
-  count = length(azurerm_windows_virtual_machine.sqlha_vm)
-  provisioner "file" {
-    source      = "${path.module}/Add-SqlLocalAdmins.ps1"
-    destination = "C:\\Add-SqlLocalAdmins.ps1"
-    connection {
-      type            = "ssh"
-      user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
-      password        = var.domain_admin_pswd
-      host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
-      target_platform = "windows"
-      timeout         = "10m"
-    }
-  }
+########## ASSOCIATE SQL SERVERS TO LOAD BALANCER BACKEND POOL ##########
+resource "azurerm_network_interface_backend_address_pool_association" "sqlha_nic_lb_association" {
+  for_each = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+
+  network_interface_id    = azurerm_network_interface.sqlha_nic[each.key].id
+  ip_configuration_name   = "internal"
+  backend_address_pool_id = azurerm_lb_backend_address_pool.sqlha_backend_pool[floor(index(var.shortregions, each.value.region) / 1)].id
+
   depends_on = [
     time_sleep.sqlha_domainjoin_wait,
   ]
 }
 
-# Copy Add-SqlSysAdmins.ps1 script
-resource "null_resource" "sql_sysadmin_script_copy" {
-  count = length(azurerm_windows_virtual_machine.sqlha_vm)
-  provisioner "file" {
-    source      = "${path.module}/Add-SqlSysAdmins.ps1"
-    destination = "C:\\Add-SqlSysAdmins.ps1"
-    connection {
-      type            = "ssh"
-      user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
-      password        = var.domain_admin_pswd
-      host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
-      target_platform = "windows"
-      timeout         = "10m"
-    }
-  }
-  depends_on = [
-    null_resource.sql_localadmin_script_copy,
-  ]
-}
-
-# Add local admins to SQL Servers
-resource "null_resource" "add_sqllocaladmins_exec" {
-  count = length(var.regions) * 2
-  connection {
-    type            = "ssh"
-    host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
-    user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
-    password        = var.domain_admin_pswd
-    target_platform = "windows"
-    timeout         = "10m"
-  }
-  provisioner "remote-exec" {
-    inline = [
-      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlLocalAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user}"
-    ]
-  }
-  depends_on = [
-    null_resource.sql_localadmin_script_copy,
-  ]
-}
-
-# Ensure stability after adding local admins
-resource "time_sleep" "sqlha_localadmins_wait" {
-  create_duration = "3m"
-  depends_on = [
-    null_resource.add_sqllocaladmins_exec,
-  ]
-}
-
-# Add SQL sysadmins to SQL Servers
-resource "null_resource" "add_sqlsysadmins_exec" {
-  count = length(var.regions) * 2
-  connection {
-    type            = "ssh"
-    host            = azurerm_public_ip.sqlha_public_ip[count.index].ip_address
-    user            = "${var.domain_netbios_name}\\${var.domain_admin_user}"
-    password        = var.domain_admin_pswd
-    target_platform = "windows"
-    timeout         = "10m"
-  }
-  provisioner "remote-exec" {
-    inline = [
-      "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -File C:\\Add-SqlSysAdmins.ps1 -domain_name ${var.domain_name} -sql_svc_acct_user ${var.sql_svc_acct_user} -sql_svc_acct_pswd ${var.sql_svc_acct_pswd}"
-    ]
-  }
-  depends_on = [
-    time_sleep.sqlha_localadmins_wait,
-    null_resource.sql_sysadmin_script_copy,
-  ]
-}
-
-# Wait for local admin & sysadmin scripts to complete
-resource "time_sleep" "sqlha_final_wait" {
-  create_duration = "5m"
-  depends_on = [
-    null_resource.add_sqlsysadmins_exec,
-  ]
-}
-
-########## ASSOCIATE SQL SERVERS TO LOAD BALANCER BACKEND ##########
-resource "azurerm_network_interface_backend_address_pool_association" "sqlha_nic_lb_association" {
-  count                   = length(azurerm_network_interface.sqlha_nic)
-  network_interface_id    = azurerm_network_interface.sqlha_nic[count.index].id
-  ip_configuration_name   = "internal"
-  backend_address_pool_id = azurerm_lb_backend_address_pool.sqlha_backend_pool[floor(count.index / 2)].id
-  depends_on = [
-    time_sleep.sqlha_final_wait,
-  ]
-}
-
-########## CREATE SQL VIRTUAL MACHINE GROUPS FOR SQLHA ##########
+########## CREATE VIRTUAL MACHINE GROUP IN EACH REGION ##########
 resource "azurerm_mssql_virtual_machine_group" "sqlha_vmg" {
-  count               = length(var.regions)
-  name                = "${var.shortregions[count.index]}-sqlhavmg"
-  location            = var.regions[count.index]
-  resource_group_name = azurerm_resource_group.rg[count.index].name
+  for_each = { for idx, region in var.shortregions : region => idx }
+
+  name                = lower("${each.key}-sqlhavmg")
+  location            = var.regions[each.value]
+  resource_group_name = azurerm_resource_group.rg[each.value].name
   sql_image_offer     = var.sql_image_offer
   sql_image_sku       = var.sql_image_sku
   tags                = var.labtags
+
   wsfc_domain_profile {
     fqdn                           = var.domain_name
     cluster_subnet_type            = "MultiSubnet"
@@ -993,37 +882,43 @@ resource "azurerm_mssql_virtual_machine_group" "sqlha_vmg" {
     cluster_operator_account_name  = "sqlinstall@${var.domain_name}"
     sql_service_account_name       = "${var.sql_svc_acct_user}@${var.domain_name}"
     organizational_unit_path       = local.servers_ou_path
-    storage_account_url            = azurerm_storage_account.sqlha_witness[count.index].primary_blob_endpoint
-    storage_account_primary_key    = azurerm_storage_account.sqlha_witness[count.index].primary_access_key
+    storage_account_url            = azurerm_storage_account.sqlha_witness[each.value].primary_blob_endpoint
+    storage_account_primary_key    = azurerm_storage_account.sqlha_witness[each.value].primary_access_key
   }
+
   depends_on = [
     azurerm_network_interface_backend_address_pool_association.sqlha_nic_lb_association,
   ]
 }
 
-# Wait for SQL VM Groups creation
 resource "time_sleep" "sqlha_vmg_wait" {
-  create_duration = "5m"
+  create_duration = "10m"
   depends_on = [
     azurerm_mssql_virtual_machine_group.sqlha_vmg,
   ]
 }
 
-########## CREATE AZURE MSSQL VIRTUAL MACHINES FOR SQL ##########
+########## CREATE MSSQL VIRTUAL MACHINE FOR EACH SQL SERVER ##########
 resource "azurerm_mssql_virtual_machine" "az_sqlha" {
-  count                        = length(var.regions) * 2
-  virtual_machine_id           = azurerm_windows_virtual_machine.sqlha_vm[count.index].id
-  sql_virtual_machine_group_id = azurerm_mssql_virtual_machine_group.sqlha_vmg[floor(count.index / 2)].id
-  sql_license_type             = "PAYG"
-  r_services_enabled           = false
-  sql_connectivity_port        = 1433
-  sql_connectivity_type        = "PRIVATE"
-  tags                         = var.labtags
+  for_each = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
+
+  # Access the VM group correctly using the region name as a key
+  sql_virtual_machine_group_id = azurerm_mssql_virtual_machine_group.sqlha_vmg[each.value.region].id
+
+  sql_license_type      = "PAYG"
+  r_services_enabled    = false
+  sql_connectivity_port = 1433
+  sql_connectivity_type = "PRIVATE"
+  tags                  = var.labtags
+
   wsfc_domain_credential {
     cluster_bootstrap_account_password = var.sql_svc_acct_pswd
     cluster_operator_account_password  = var.sql_svc_acct_pswd
     sql_service_account_password       = var.sql_svc_acct_pswd
   }
+
   storage_configuration {
     disk_type             = "NEW"
     storage_workload_type = "GENERAL"
@@ -1040,17 +935,18 @@ resource "azurerm_mssql_virtual_machine" "az_sqlha" {
       luns              = [2]
     }
   }
+
   timeouts {
     create = "1h"
     update = "1h"
     delete = "1h"
   }
+
   depends_on = [
     time_sleep.sqlha_vmg_wait,
   ]
 }
 
-########## WAIT FOR MSSQL VMs INITIALIZATION ##########
 resource "time_sleep" "sqlha_mssqlvm_wait" {
   create_duration = "10m"
   depends_on = [
