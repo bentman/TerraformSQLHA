@@ -21,10 +21,10 @@
 ## **Network Configuration Table**
 | **Address Space**  | **Subnet**            | **Resources**                              |
 |--------------------|-----------------------|--------------------------------------------|
-| **10.1.0.0/24**    | **Gateway Subnet**    | **usw-nat-gateway** <br>- Public IP: `usw-gateway-ip` (Static) |
+| **10.1.0.0/24**    | **Gateway Subnet**    |  |
 |                    | **ADDC Subnet**       | **usw-addc-vm** <br>- NIC: `usw-addc-nic` <br>- Private IP: 10.1.0.5 <br>- Public IP: `usw-addc-pip` (Static) |
 |                    | **Database Subnet**   | **usw-sqlha-lb** <br>- Frontend IP: 10.1.0.20 (Static) <br> **usw-sqlha0-vm** <br>- NIC: `usw-sqlha0-nic` <br>- Private IP: 10.1.0.9 <br>- Public IP: `usw-sqlha0-public-ip` (Static) <br> **usw-sqlha1-vm** <br>- NIC: `usw-sqlha1-nic` <br>- Private IP: 10.1.0.10 <br>- Public IP: `usw-sqlha1-public-ip` (Static) |
-| **10.1.1.0/24**    | **Gateway Subnet**    | **use-nat-gateway** <br>- Public IP: `use-gateway-ip` (Static) |
+| **10.1.1.0/24**    | **Gateway Subnet**    |  |
 |                    | **ADDC Subnet**       | **use-addc-vm** <br>- NIC: `use-addc-nic` <br>- Private IP: 10.1.1.5 <br>- Public IP: `use-addc-pip` (Static) |
 |                    | **Database Subnet**   | **use-sqlha-lb** <br>- Frontend IP: 10.1.1.20 (Static) <br> **use-sqlha0-vm** <br>- NIC: `use-sqlha0-nic` <br>- Private IP: 10.1.1.9 <br>- Public IP: `use-sqlha0-public-ip` (Static) <br> **use-sqlha1-vm** <br>- NIC: `use-sqlha1-nic` <br>- Private IP: 10.1.1.10 <br>- Public IP: `use-sqlha1-public-ip` (Static) |
 ---
