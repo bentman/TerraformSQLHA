@@ -652,6 +652,9 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   identity {
     type = "SystemAssigned"
   }
+  depends_on = [
+    null_resource.add_domain_accounts_exec
+  ]
 }
 
 ########## INSTALL OPENSSH ON SQLHA VIRTUAL MACHINES ##########
