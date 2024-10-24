@@ -668,57 +668,6 @@ resource "azurerm_virtual_machine_extension" "install_openssh_sql" {
   ]
 }
 
-########## SQL MANAGED DISKS ##########
-# Data Disks for SQLHA VMs
-resource "azurerm_managed_disk" "sqlha_data" {
-  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  name                 = "${each.value.region}-sqlha${each.value.index}-data-disk"
-  location             = var.regions[index(var.shortregions, each.value.region)]
-  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
-  zone                 = "1"
-  storage_account_type = "Standard_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = 90
-  tags                 = var.labtags
-}
-
-resource "azurerm_managed_disk" "sqlha_logs" {
-  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  name                 = "${each.value.region}-sqlha${each.value.index}-log-disk"
-  location             = var.regions[index(var.shortregions, each.value.region)]
-  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
-  zone                 = "1"
-  storage_account_type = "Standard_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = 60
-  tags                 = var.labtags
-}
-
-resource "azurerm_managed_disk" "sqlha_temp" {
-  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  name                 = "${each.value.region}-sqlha${each.value.index}-temp-disk"
-  location             = var.regions[index(var.shortregions, each.value.region)]
-  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
-  zone                 = "1"
-  storage_account_type = "Standard_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = 30
-  tags                 = var.labtags
-}
-
-# Data Disk Attachments
-resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_attachments" {
-  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  managed_disk_id    = azurerm_managed_disk.sqlha_data[each.key].id
-  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
-  lun                = 0
-  caching            = "ReadWrite"
-  depends_on = [
-    azurerm_windows_virtual_machine.sqlha_vm,
-    azurerm_managed_disk.sqlha_temp,
-  ]
-}
-
 ########## DOMAIN JOIN SQL SERVERS ##########
 # Copy Domain Join Script
 resource "null_resource" "sql_domainjoin_script_copy" {
@@ -736,7 +685,7 @@ resource "null_resource" "sql_domainjoin_script_copy" {
     }
   }
   depends_on = [
-    azurerm_virtual_machine_data_disk_attachment.sqlha_attachments,
+    azurerm_virtual_machine_extension.install_openssh_sql,
   ]
 }
 
@@ -761,7 +710,83 @@ resource "time_sleep" "sqlha_domainjoin_script_wait" {
   ]
 }
 
-# Restart SQLHA VMs After Domain Join
+########## SQL MANAGED DISKS ##########
+# Create Disks (DATA, LOGS, TEMP)
+resource "azurerm_managed_disk" "sqlha_data" {
+  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                 = "${each.value.region}-sqlha${each.value.index}-data-disk"
+  location             = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
+  zone                 = "1"
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 90
+  tags                 = var.labtags
+  depends_on = [
+    time_sleep.sqlha_domainjoin_script_wait,
+  ]
+}
+
+resource "azurerm_managed_disk" "sqlha_logs" {
+  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                 = "${each.value.region}-sqlha${each.value.index}-logs-disk"
+  location             = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
+  zone                 = "1"
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 60
+  tags                 = var.labtags
+  depends_on = [
+    time_sleep.sqlha_domainjoin_script_wait,
+  ]
+}
+
+resource "azurerm_managed_disk" "sqlha_temp" {
+  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                 = "${each.value.region}-sqlha${each.value.index}-temp-disk"
+  location             = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
+  zone                 = "1"
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 30
+  tags                 = var.labtags
+  depends_on = [
+    time_sleep.sqlha_domainjoin_script_wait,
+  ]
+}
+
+# Attach Disks (DATA, LOGS, TEMP)
+resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_data_attach" {
+  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  managed_disk_id    = azurerm_managed_disk.sqlha_data[each.key].id
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
+  lun                = 0
+  caching            = "ReadWrite"
+  depends_on = [
+    time_sleep.sqlha_domainjoin_script_wait,
+  ]
+}
+
+resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_logs_attach" {
+  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  managed_disk_id    = azurerm_managed_disk.sqlha_logs[each.key].id
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
+  lun                = 1
+  caching            = "ReadOnly"
+}
+
+# SQL Disk Attachments
+resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_temp_attach" {
+  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  managed_disk_id    = azurerm_managed_disk.sqlha_temp[each.key].id
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
+  lun                = 2
+  caching            = "None"
+}
+
+########## Restart SQLHA after Domain Join & Disks ##########
 resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
   for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
   name               = "SqlRestartCommand-${each.value.region}-${each.value.index}"
@@ -771,11 +796,13 @@ resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
   depends_on = [
-    time_sleep.sqlha_domainjoin_script_wait,
+    azurerm_virtual_machine_data_disk_attachment.sqlha_data_attach,
+    azurerm_virtual_machine_data_disk_attachment.sqlha_logs_attach,
+    azurerm_virtual_machine_data_disk_attachment.sqlha_temp_attach,
   ]
 }
 
-# Final Wait After SQLHA VM Restart
+# Wait After SQLHA VM Restart
 resource "time_sleep" "sqlha_domainjoin_wait" {
   create_duration = "10m"
   depends_on = [
