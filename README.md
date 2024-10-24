@@ -1,5 +1,3 @@
-Here's a revised version of the README.md that incorporates the network configuration table while maintaining conciseness:
-
 # Azure SQL High-Availability Multi-Region Lab
 ---
 ## Overview
