@@ -71,10 +71,13 @@ Here's a revised version of the README.md that incorporates the network configur
 6. Access resources via generated public IPs
 ---
 ## Cleanup
-Run `terraform destroy` to remove all created resources
+Remove all created resources
+   ```powershell
+   terraform apply
+   ```
 ---
 ## **Important Notes**
-- **Lab Environment**: Designed for learning and testing scenarios.  
+- **Lab Environment**: Intended for learning and testing scenarios (not production).  
 - **Security Considerations**: Use strong passwords and manage public IPs carefully.  
 - **Sensitive Data**: Exclude `terraform.tfvars` from version control to secure credentials.  
 - **.gitignore**: Use the included `.gitignore` to manage version control effectively.
