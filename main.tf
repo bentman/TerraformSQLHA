@@ -36,49 +36,64 @@ resource "azurerm_virtual_network" "vnet" {
   ]
 }
 
-# Create Gateway Subnet within each Virtual Network
+# Create Gateway Subnet within each Virtual Network # /28 = 10.1.x.0/28
 resource "azurerm_subnet" "snet_gw" {
   count                = length(var.regions)
   name                 = "${var.shortregions[count.index]}-snet-gw"
   resource_group_name  = azurerm_resource_group.rg[count.index].name
   virtual_network_name = azurerm_virtual_network.vnet[count.index].name
   address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 4, 0)]
+  depends_on = [
+    azurerm_virtual_network.vnet,
+  ]
 }
 
-# Create Active Directory Domain Controllers (ADDC) Subnet
+# Create Active Directory Domain Controllers (ADDC) Subnet # /28 = 10.1.x.16/28
 resource "azurerm_subnet" "snet_addc" {
   count                = length(var.regions)
   name                 = "${var.shortregions[count.index]}-snet-addc"
   resource_group_name  = azurerm_resource_group.rg[count.index].name
   virtual_network_name = azurerm_virtual_network.vnet[count.index].name
-  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 3, 1)]
+  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 4, 1)]
+  depends_on = [
+    azurerm_subnet.snet_gw,
+  ]
 }
 
-# Create Database Subnet within each Virtual Network
+# Create Database Subnet within each Virtual Network # /28 = 10.1.x.32/28
 resource "azurerm_subnet" "snet_db" {
   count                = length(var.regions)
   name                 = "${var.shortregions[count.index]}-snet-db"
   resource_group_name  = azurerm_resource_group.rg[count.index].name
   virtual_network_name = azurerm_virtual_network.vnet[count.index].name
-  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 3, 2)]
+  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 4, 2)]
+  depends_on = [
+    azurerm_subnet.snet_addc,
+  ]
 }
 
-# Create Application Subnet within each Virtual Network
+# Create Application Subnet within each Virtual Network # /28 = 10.1.x.48/28
 resource "azurerm_subnet" "snet_app" {
   count                = length(var.regions)
   name                 = "${var.shortregions[count.index]}-snet-app"
   resource_group_name  = azurerm_resource_group.rg[count.index].name
   virtual_network_name = azurerm_virtual_network.vnet[count.index].name
-  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 3, 3)]
+  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 4, 3)]
+  depends_on = [
+    azurerm_subnet.snet_db,
+  ]
 }
 
-# Create Client Subnet within each Virtual Network
+# Create Client Subnet within each Virtual Network # /28 = 10.1.x.64/28
 resource "azurerm_subnet" "snet_client" {
   count                = length(var.regions)
   name                 = "${var.shortregions[count.index]}-snet-client"
   resource_group_name  = azurerm_resource_group.rg[count.index].name
   virtual_network_name = azurerm_virtual_network.vnet[count.index].name
-  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 4, 7)]
+  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 4, 4)]
+  depends_on = [
+    azurerm_subnet.snet_app,
+  ]
 }
 
 #################### NETWORK SECURITY GROUP (NSG) ####################
@@ -124,7 +139,7 @@ resource "azurerm_network_security_group" "nsg" {
     source_address_prefix      = "*"
     destination_address_prefix = "*"
   }
-  # NSG rule to allow internal traffic
+  # NSG rule to allow internal traffic0
   security_rule {
     name                       = "Allow-Internal"
     priority                   = 1000
@@ -133,64 +148,109 @@ resource "azurerm_network_security_group" "nsg" {
     protocol                   = "*"
     source_port_range          = "*"
     destination_port_range     = "*"
-    source_address_prefix      = "10.0.0.0/8"
+    source_address_prefix      = var.address_spaces[0]
     destination_address_prefix = "*"
   }
+  # NSG rule to allow internal traffic0
+  security_rule {
+    name                       = "Allow-Internal"
+    priority                   = 1100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = var.address_spaces[1]
+    destination_address_prefix = "*"
+  }
+  depends_on = [
+    azurerm_subnet.snet_client,
+  ]
 }
 
 # NSG Association for GW Subnet in both regions
 resource "azurerm_subnet_network_security_group_association" "nsg_association_gw0" {
   subnet_id                 = azurerm_subnet.snet_gw[0].id
   network_security_group_id = azurerm_network_security_group.nsg[0].id
+  depends_on = [
+    azurerm_subnet.snet_client,
+  ]
 }
 
 resource "azurerm_subnet_network_security_group_association" "nsg_association_gw1" {
   subnet_id                 = azurerm_subnet.snet_gw[1].id
   network_security_group_id = azurerm_network_security_group.nsg[1].id
+  depends_on = [
+    azurerm_subnet.snet_client,
+  ]
 }
 
 # NSG Association for ADDC Subnet in both regions
 resource "azurerm_subnet_network_security_group_association" "nsg_association_addc0" {
   subnet_id                 = azurerm_subnet.snet_addc[0].id
   network_security_group_id = azurerm_network_security_group.nsg[0].id
+  depends_on = [
+    azurerm_subnet_network_security_group_association.nsg_association_gw0,
+  ]
 }
 
 resource "azurerm_subnet_network_security_group_association" "nsg_association_addc1" {
   subnet_id                 = azurerm_subnet.snet_addc[1].id
   network_security_group_id = azurerm_network_security_group.nsg[1].id
+  depends_on = [
+    azurerm_subnet_network_security_group_association.nsg_association_gw1,
+  ]
 }
 
 # NSG Association for DB Subnet in both regions
 resource "azurerm_subnet_network_security_group_association" "nsg_association_db0" {
   subnet_id                 = azurerm_subnet.snet_db[0].id
   network_security_group_id = azurerm_network_security_group.nsg[0].id
+  depends_on = [
+    azurerm_subnet_network_security_group_association.nsg_association_addc0,
+  ]
 }
 
 resource "azurerm_subnet_network_security_group_association" "nsg_association_db1" {
   subnet_id                 = azurerm_subnet.snet_db[1].id
   network_security_group_id = azurerm_network_security_group.nsg[1].id
+  depends_on = [
+    azurerm_subnet_network_security_group_association.nsg_association_addc1,
+  ]
 }
 
 # NSG Association for APP Subnet in both regions
 resource "azurerm_subnet_network_security_group_association" "nsg_association_app0" {
   subnet_id                 = azurerm_subnet.snet_app[0].id
   network_security_group_id = azurerm_network_security_group.nsg[0].id
+  depends_on = [
+    azurerm_subnet_network_security_group_association.nsg_association_db0,
+  ]
 }
 
 resource "azurerm_subnet_network_security_group_association" "nsg_association_app1" {
   subnet_id                 = azurerm_subnet.snet_app[1].id
   network_security_group_id = azurerm_network_security_group.nsg[1].id
+  depends_on = [
+    azurerm_subnet_network_security_group_association.nsg_association_db1,
+  ]
 }
 
 # NSG Association for Client Subnet in both regions
 resource "azurerm_subnet_network_security_group_association" "nsg_association_client0" {
   subnet_id                 = azurerm_subnet.snet_client[0].id
   network_security_group_id = azurerm_network_security_group.nsg[0].id
+  depends_on = [
+    azurerm_subnet_network_security_group_association.nsg_association_app0,
+  ]
 }
 
 resource "azurerm_subnet_network_security_group_association" "nsg_association_client1" {
   subnet_id                 = azurerm_subnet.snet_client[1].id
   network_security_group_id = azurerm_network_security_group.nsg[1].id
+  depends_on = [
+    azurerm_subnet_network_security_group_association.nsg_association_client0,
+  ]
 }
 
 #################### VIRTUAL NETWORK PEERING ####################
@@ -204,8 +264,7 @@ resource "azurerm_virtual_network_peering" "peering1" {
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
   depends_on = [
-    azurerm_virtual_network.vnet[0],
-    azurerm_virtual_network.vnet[1],
+    azurerm_subnet_network_security_group_association.nsg_association_client1,
   ]
 }
 
@@ -219,13 +278,13 @@ resource "azurerm_virtual_network_peering" "peering2" {
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
   depends_on = [
-    azurerm_virtual_network.vnet[1],
-    azurerm_virtual_network.vnet[0],
+    azurerm_virtual_network_peering.peering1,
   ]
 }
 
 ########## CREATE LOAD BALANCERS FOR SQLHA ##########
 # Create Load Balancer in each region
+# Load Balancer
 resource "azurerm_lb" "sqlha_lb" {
   count               = length(var.regions)
   name                = "${var.shortregions[count.index]}-sqlha-lb"
@@ -233,15 +292,16 @@ resource "azurerm_lb" "sqlha_lb" {
   resource_group_name = azurerm_resource_group.rg[count.index].name
   sku                 = "Standard"
   tags                = var.labtags
+
   frontend_ip_configuration {
     name                          = "${var.shortregions[count.index]}-sqlha-frontend"
     subnet_id                     = azurerm_subnet.snet_db[count.index].id
     private_ip_address_allocation = "Static"
-    private_ip_address            = cidrhost(azurerm_subnet.snet_db[count.index].address_prefixes[0], 20)
-    zones                         = ["1"]
+    private_ip_address            = cidrhost(azurerm_subnet.snet_db[count.index].address_prefixes[0], 6)
+    zones                         = null
   }
+
   depends_on = [
-    azurerm_virtual_network_peering.peering1,
     azurerm_virtual_network_peering.peering2,
   ]
 }
@@ -254,7 +314,7 @@ resource "azurerm_lb_probe" "sqlha_probe" {
   protocol            = "Tcp"
   port                = 5999
   interval_in_seconds = 5
-  number_of_probes    = 2
+  number_of_probes    = 3 # Increased for better reliability
 }
 
 # Load Balancer rule for SQL listener
@@ -268,6 +328,9 @@ resource "azurerm_lb_rule" "sqlha_lb_rule" {
   frontend_ip_configuration_name = "${var.shortregions[count.index]}-sqlha-frontend"
   backend_address_pool_ids       = [azurerm_lb_backend_address_pool.sqlha_backend_pool[count.index].id]
   probe_id                       = azurerm_lb_probe.sqlha_probe[count.index].id
+  enable_floating_ip             = true
+  idle_timeout_in_minutes        = 4
+  enable_tcp_reset               = true
 }
 
 # Backend address pool for Load Balancer
@@ -291,8 +354,7 @@ resource "azurerm_storage_account" "sqlha_witness" {
   min_tls_version            = "TLS1_2"
   tags                       = var.labtags
   depends_on = [
-    azurerm_virtual_network_peering.peering1,
-    azurerm_virtual_network_peering.peering2,
+    azurerm_lb.sqlha_lb,
   ]
 }
 
@@ -315,7 +377,6 @@ resource "azurerm_public_ip" "addc_public_ip" {
   zones               = ["1"]
   tags                = var.labtags
   depends_on = [
-    azurerm_virtual_network_peering.peering1,
     azurerm_virtual_network_peering.peering2,
   ]
 }
@@ -381,6 +442,9 @@ resource "azurerm_windows_virtual_machine" "addc_vm" {
   identity {
     type = "SystemAssigned"
   }
+  depends_on = [
+    azurerm_network_interface.addc_nic,
+  ]
 }
 
 # Install OpenSSH Extension for ADDC VMs
@@ -394,6 +458,14 @@ resource "azurerm_virtual_machine_extension" "install_openssh_addc" {
   auto_upgrade_minor_version = true
   depends_on = [
     azurerm_windows_virtual_machine.addc_vm
+  ]
+}
+
+# Ensure the VM is in a stable state before executing the next command
+resource "time_sleep" "install_openssh_addc_wait" {
+  create_duration = "2m"
+  depends_on = [
+    azurerm_virtual_machine_extension.install_openssh_addc,
   ]
 }
 
@@ -413,7 +485,7 @@ resource "null_resource" "setup_domain_copy" {
     }
   }
   depends_on = [
-    azurerm_virtual_machine_extension.install_openssh_addc,
+    time_sleep.install_openssh_addc_wait,
   ]
 }
 
@@ -592,7 +664,6 @@ resource "azurerm_public_ip" "sqlha_public_ip" {
   zones               = ["1"]
   tags                = var.labtags
   depends_on = [
-    azurerm_virtual_network_peering.peering1,
     azurerm_virtual_network_peering.peering2,
   ]
 }
@@ -606,16 +677,19 @@ resource "azurerm_network_interface" "sqlha_nic" {
   accelerated_networking_enabled = true
   tags                           = var.labtags
   ip_configuration {
-    name                          = lower("${each.value.region}-sqlha${each.value.index}-nic-config")
+    name                          = "internal"
     subnet_id                     = azurerm_subnet.snet_db[index(var.shortregions, each.value.region)].id
     private_ip_address_allocation = "Static"
-    private_ip_address            = cidrhost(azurerm_subnet.snet_db[index(var.shortregions, each.value.region)].address_prefixes[0], each.value.index == 0 ? 9 : 10)
+    private_ip_address            = cidrhost(azurerm_subnet.snet_db[index(var.shortregions, each.value.region)].address_prefixes[0], each.value.index == 0 ? 8 : 9)
     primary                       = true
     public_ip_address_id          = azurerm_public_ip.sqlha_public_ip[each.key].id
   }
   dns_servers = [
     cidrhost(azurerm_subnet.snet_addc[0].address_prefixes[0], 5),
     cidrhost(azurerm_subnet.snet_addc[1].address_prefixes[0], 5),
+  ]
+  depends_on = [
+    azurerm_public_ip.sqlha_public_ip,
   ]
 }
 
@@ -653,8 +727,81 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
     type = "SystemAssigned"
   }
   depends_on = [
-    null_resource.add_domain_accounts_exec
+    azurerm_network_interface.sqlha_nic,
   ]
+}
+
+########## SQL MANAGED DISKS ##########
+# Create Disks (DATA, LOGS, TEMP)
+resource "azurerm_managed_disk" "sqlha_data" {
+  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                 = "${each.value.region}-sqlha${each.value.index}-data-disk"
+  location             = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
+  zone                 = "1"
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 90
+  tags                 = var.labtags
+  depends_on = [
+    azurerm_windows_virtual_machine.sqlha_vm,
+  ]
+}
+
+resource "azurerm_managed_disk" "sqlha_logs" {
+  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                 = "${each.value.region}-sqlha${each.value.index}-logs-disk"
+  location             = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
+  zone                 = "1"
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 60
+  tags                 = var.labtags
+  depends_on = [
+    azurerm_windows_virtual_machine.sqlha_vm,
+  ]
+}
+
+resource "azurerm_managed_disk" "sqlha_temp" {
+  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  name                 = "${each.value.region}-sqlha${each.value.index}-temp-disk"
+  location             = var.regions[index(var.shortregions, each.value.region)]
+  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
+  zone                 = "1"
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 30
+  tags                 = var.labtags
+  depends_on = [
+    azurerm_windows_virtual_machine.sqlha_vm,
+  ]
+}
+
+# Attach Disks (DATA, LOGS, TEMP)
+resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_data_attach" {
+  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  managed_disk_id    = azurerm_managed_disk.sqlha_data[each.key].id
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
+  lun                = 0
+  caching            = "ReadWrite"
+}
+
+resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_logs_attach" {
+  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  managed_disk_id    = azurerm_managed_disk.sqlha_logs[each.key].id
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
+  lun                = 1
+  caching            = "ReadOnly"
+}
+
+# SQL Disk Attachments
+resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_temp_attach" {
+  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  managed_disk_id    = azurerm_managed_disk.sqlha_temp[each.key].id
+  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
+  lun                = 2
+  caching            = "None"
 }
 
 ########## INSTALL OPENSSH ON SQLHA VIRTUAL MACHINES ##########
@@ -668,6 +815,14 @@ resource "azurerm_virtual_machine_extension" "install_openssh_sql" {
   auto_upgrade_minor_version = true
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
+  ]
+}
+
+# Wait for sql ssh to settle
+resource "time_sleep" "install_openssh_sql_wait" {
+  create_duration = "2m"
+  depends_on = [
+    azurerm_virtual_machine_extension.install_openssh_sql,
   ]
 }
 
@@ -688,7 +843,7 @@ resource "null_resource" "sql_domainjoin_script_copy" {
     }
   }
   depends_on = [
-    azurerm_virtual_machine_extension.install_openssh_sql,
+    time_sleep.install_openssh_sql_wait,
   ]
 }
 
@@ -703,6 +858,7 @@ resource "azurerm_virtual_machine_run_command" "sql_domainjoin_script_exec" {
   }
   depends_on = [
     null_resource.sql_domainjoin_script_copy,
+    null_resource.add_domain_accounts_exec,
   ]
 }
 # Wait for SQLHA VMs After Domain Join
@@ -711,82 +867,6 @@ resource "time_sleep" "sqlha_domainjoin_script_wait" {
   depends_on = [
     azurerm_virtual_machine_run_command.sql_domainjoin_script_exec,
   ]
-}
-
-########## SQL MANAGED DISKS ##########
-# Create Disks (DATA, LOGS, TEMP)
-resource "azurerm_managed_disk" "sqlha_data" {
-  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  name                 = "${each.value.region}-sqlha${each.value.index}-data-disk"
-  location             = var.regions[index(var.shortregions, each.value.region)]
-  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
-  zone                 = "1"
-  storage_account_type = "Standard_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = 90
-  tags                 = var.labtags
-  depends_on = [
-    time_sleep.sqlha_domainjoin_script_wait,
-  ]
-}
-
-resource "azurerm_managed_disk" "sqlha_logs" {
-  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  name                 = "${each.value.region}-sqlha${each.value.index}-logs-disk"
-  location             = var.regions[index(var.shortregions, each.value.region)]
-  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
-  zone                 = "1"
-  storage_account_type = "Standard_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = 60
-  tags                 = var.labtags
-  depends_on = [
-    time_sleep.sqlha_domainjoin_script_wait,
-  ]
-}
-
-resource "azurerm_managed_disk" "sqlha_temp" {
-  for_each             = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  name                 = "${each.value.region}-sqlha${each.value.index}-temp-disk"
-  location             = var.regions[index(var.shortregions, each.value.region)]
-  resource_group_name  = azurerm_resource_group.rg[index(var.shortregions, each.value.region)].name
-  zone                 = "1"
-  storage_account_type = "Standard_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = 30
-  tags                 = var.labtags
-  depends_on = [
-    time_sleep.sqlha_domainjoin_script_wait,
-  ]
-}
-
-# Attach Disks (DATA, LOGS, TEMP)
-resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_data_attach" {
-  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  managed_disk_id    = azurerm_managed_disk.sqlha_data[each.key].id
-  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
-  lun                = 0
-  caching            = "ReadWrite"
-  depends_on = [
-    time_sleep.sqlha_domainjoin_script_wait,
-  ]
-}
-
-resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_logs_attach" {
-  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  managed_disk_id    = azurerm_managed_disk.sqlha_logs[each.key].id
-  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
-  lun                = 1
-  caching            = "ReadOnly"
-}
-
-# SQL Disk Attachments
-resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_temp_attach" {
-  for_each           = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-  managed_disk_id    = azurerm_managed_disk.sqlha_temp[each.key].id
-  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
-  lun                = 2
-  caching            = "None"
 }
 
 ########## Restart SQLHA after Domain Join & Disks ##########
@@ -799,6 +879,7 @@ resource "azurerm_virtual_machine_run_command" "sqlha_domainjoin_restart" {
     script = "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command Restart-Computer -Force"
   }
   depends_on = [
+    time_sleep.sqlha_domainjoin_script_wait,
     azurerm_virtual_machine_data_disk_attachment.sqlha_data_attach,
     azurerm_virtual_machine_data_disk_attachment.sqlha_logs_attach,
     azurerm_virtual_machine_data_disk_attachment.sqlha_temp_attach,
@@ -815,12 +896,10 @@ resource "time_sleep" "sqlha_domainjoin_wait" {
 
 ########## ASSOCIATE SQL SERVERS TO LOAD BALANCER BACKEND POOL ##########
 resource "azurerm_network_interface_backend_address_pool_association" "sqlha_nic_lb_association" {
-  for_each = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
-
+  for_each                = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
   network_interface_id    = azurerm_network_interface.sqlha_nic[each.key].id
   ip_configuration_name   = "internal"
   backend_address_pool_id = azurerm_lb_backend_address_pool.sqlha_backend_pool[floor(index(var.shortregions, each.value.region) / 1)].id
-
   depends_on = [
     time_sleep.sqlha_domainjoin_wait,
   ]
@@ -836,7 +915,6 @@ resource "azurerm_mssql_virtual_machine_group" "sqlha_vmg" {
   sql_image_offer     = var.sql_image_offer
   sql_image_sku       = var.sql_image_sku
   tags                = var.labtags
-
   wsfc_domain_profile {
     fqdn                           = var.domain_name
     cluster_subnet_type            = "MultiSubnet"
@@ -847,7 +925,6 @@ resource "azurerm_mssql_virtual_machine_group" "sqlha_vmg" {
     storage_account_url            = azurerm_storage_account.sqlha_witness[each.value].primary_blob_endpoint
     storage_account_primary_key    = azurerm_storage_account.sqlha_witness[each.value].primary_access_key
   }
-
   depends_on = [
     azurerm_network_interface_backend_address_pool_association.sqlha_nic_lb_association,
   ]
@@ -864,23 +941,18 @@ resource "time_sleep" "sqlha_vmg_wait" {
 resource "azurerm_mssql_virtual_machine" "az_sqlha" {
   for_each = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
 
-  virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
-
-  # Access the VM group correctly using the region name as a key
+  virtual_machine_id           = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
   sql_virtual_machine_group_id = azurerm_mssql_virtual_machine_group.sqlha_vmg[each.value.region].id
-
-  sql_license_type      = "PAYG"
-  r_services_enabled    = false
-  sql_connectivity_port = 1433
-  sql_connectivity_type = "PRIVATE"
-  tags                  = var.labtags
-
+  sql_license_type             = "PAYG"
+  r_services_enabled           = false
+  sql_connectivity_port        = 1433
+  sql_connectivity_type        = "PRIVATE"
+  tags                         = var.labtags
   wsfc_domain_credential {
     cluster_bootstrap_account_password = var.sql_svc_acct_pswd
     cluster_operator_account_password  = var.sql_svc_acct_pswd
     sql_service_account_password       = var.sql_svc_acct_pswd
   }
-
   storage_configuration {
     disk_type             = "NEW"
     storage_workload_type = "GENERAL"
@@ -897,13 +969,11 @@ resource "azurerm_mssql_virtual_machine" "az_sqlha" {
       luns              = [2]
     }
   }
-
   timeouts {
     create = "1h"
     update = "1h"
     delete = "1h"
   }
-
   depends_on = [
     time_sleep.sqlha_vmg_wait,
   ]
