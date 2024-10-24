@@ -78,7 +78,7 @@ resource "azurerm_subnet" "snet_client" {
   name                 = "${var.shortregions[count.index]}-snet-client"
   resource_group_name  = azurerm_resource_group.rg[count.index].name
   virtual_network_name = azurerm_virtual_network.vnet[count.index].name
-  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 4, 15)]
+  address_prefixes     = [cidrsubnet(var.address_spaces[count.index], 4, 7)]
 }
 
 #################### NETWORK SECURITY GROUP (NSG) ####################
