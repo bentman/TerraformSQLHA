@@ -73,7 +73,7 @@ Here's a revised version of the README.md that incorporates the network configur
 ## Cleanup
 Remove all created resources
    ```powershell
-   terraform apply
+   terraform destroy
    ```
 ---
 ## **Important Notes**
