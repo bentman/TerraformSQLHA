@@ -5,6 +5,52 @@
 - Includes Active Directory Domain Controllers (ADDC) and SQL High Availability (SQLHA)
 - Uses Windows Server Failover Clustering (WSFC) across two Azure regions
 ---
+## Prerequisites
+- Terraform v1.6.0+
+- AzureRM v4.0+
+- Azure subscription with necessary permissions
+- Service Principal for authentication
+- PowerShell for custom scripts
+---
+## Project Structure
+- `terraform.tfvars`: Authentication secrets
+- `providers.tf`: Provider versions
+- `main.tf`: Main configuration
+- `variables.tf`: Variables and placeholders
+- `.\scripts.ps1`: PowerShell scripts for domain setup, clustering, and SQL configurations
+---
+## Quick Start
+1. **Clone the Repository**:
+   ```powershell
+   git clone https://github.com/bentman/TerraformSQLHA
+   cd .\TerraformSQLHA
+   ```
+2. **Set Up Environment Variables**: 
+   Copy `example_terraform.tfvars` to `terraform.tfvars`, edit to provide...
+   - `arm_tenant_id       = "YourTenantId"`  
+   - `arm_subscription_id = "YourSubscriptionId"`  
+   - `arm_client_id       = "YourServicePrincipalId"`  
+   - `arm_client_secret   = "YourServicePrincipalSecret"`
+3. **Initialize Terraform**:
+   ```powershell
+   terraform init
+   ```
+4. **Plan the Deployment**:
+   ```powershell
+   terraform plan
+   ```
+5. **Apply the Configuration**:
+   ```powershell
+   terraform apply
+   ```
+6. Access resources via generated public IPs
+---
+## Cleanup
+Remove all created resources
+   ```powershell
+   terraform destroy
+   ```
+---
 ## Networking Configuration
 - Two Virtual Networks, one per region
 - Multiple subnets for different purposes:
@@ -27,52 +73,6 @@
 | **10.1.1.0/24**    | **Gateway Subnet**    |  |
 |                    | **ADDC Subnet**       | **use-addc-vm** <br>- NIC: `use-addc-nic` <br>- Private IP: 10.1.1.5 <br>- Public IP: `use-addc-pip` (Static) |
 |                    | **Database Subnet**   | **use-sqlha-lb** <br>- Frontend IP: 10.1.1.20 (Static) <br> **use-sqlha0-vm** <br>- NIC: `use-sqlha0-nic` <br>- Private IP: 10.1.1.9 <br>- Public IP: `use-sqlha0-public-ip` (Static) <br> **use-sqlha1-vm** <br>- NIC: `use-sqlha1-nic` <br>- Private IP: 10.1.1.10 <br>- Public IP: `use-sqlha1-public-ip` (Static) |
----
-## Project Structure
-- `terraform.tfvars`: Authentication secrets
-- `providers.tf`: Provider versions
-- `main.tf`: Main configuration
-- `variables.tf`: Variables and placeholders
-- `.\scripts.ps1`: PowerShell scripts for domain setup, clustering, and SQL configurations
----
-## Prerequisites
-- Terraform v1.6.0+
-- AzureRM v4.0+
-- Azure subscription with necessary permissions
-- Service Principal for authentication
-- PowerShell for custom scripts
----
-## Quick Start
-1. **Clone the Repository**:
-   ```powershell
-   git clone https://github.com/bentman/TerraformSQLHA
-   cd .\TerraformSQLHA
-   ```
-2. **Set Up Environment Variables**: 
-   Copy `example_terraform.tfvars` to `terraform.tfvars`, edit to provide...
-   - `arm_tenant_id`  
-   - `arm_subscription_id`  
-   - `arm_client_id`  
-   - `arm_client_secret`
-3. **Initialize Terraform**:
-   ```powershell
-   terraform init
-   ```
-4. **Plan the Deployment**:
-   ```powershell
-   terraform plan
-   ```
-5. **Apply the Configuration**:
-   ```powershell
-   terraform apply
-   ```
-6. Access resources via generated public IPs
----
-## Cleanup
-Remove all created resources
-   ```powershell
-   terraform destroy
-   ```
 ---
 ## **Important Notes**
 - **Lab Environment**: Intended for learning and testing scenarios (not production).  

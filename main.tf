@@ -11,6 +11,8 @@ locals {
       { region = r, index = 1 }
     ]
   ])
+  vnet0 = var.address_spaces[0]
+  vnet1 = var.address_spaces[1]
 }
 
 #################### MAIN ####################
@@ -141,26 +143,26 @@ resource "azurerm_network_security_group" "nsg" {
   }
   # NSG rule to allow internal traffic0
   security_rule {
-    name                       = "Allow-Internal"
+    name                       = "Allow-Internal-0"
     priority                   = 1000
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "*"
     source_port_range          = "*"
     destination_port_range     = "*"
-    source_address_prefix      = var.address_spaces[0]
+    source_address_prefix      = local.vnet0
     destination_address_prefix = "*"
   }
-  # NSG rule to allow internal traffic0
+  # NSG rule to allow internal traffic1
   security_rule {
-    name                       = "Allow-Internal"
+    name                       = "Allow-Internal-1"
     priority                   = 1100
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "*"
     source_port_range          = "*"
     destination_port_range     = "*"
-    source_address_prefix      = var.address_spaces[1]
+    source_address_prefix      = local.vnet1
     destination_address_prefix = "*"
   }
   depends_on = [
