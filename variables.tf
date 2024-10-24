@@ -58,7 +58,7 @@ variable "address_spaces" {
 ########## VM VARIABLES
 variable "vm_addc_size" {
   description = "value"
-  default     = "Standard_D2s_v3"
+  default     = "Standard_B2s_v2"
 }
 
 variable "vm_sqlha_size" {
