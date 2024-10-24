@@ -82,7 +82,7 @@ Remove all created resources
 - **Sensitive Data**: Exclude `terraform.tfvars` from version control to secure credentials.  
 - **.gitignore**: Use the included `.gitignore` to manage version control effectively.
 ---
-## Contributions
+### Contributions
 Contributions are welcome. Please open an issue or submit a pull request if you have any suggestions, questions, or would like to contribute to the project.
 ---
 ### GNU General Public License
