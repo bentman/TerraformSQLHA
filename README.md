@@ -82,10 +82,12 @@ Remove all created resources
 - **Sensitive Data**: Exclude `terraform.tfvars` from version control to secure credentials.  
 - **.gitignore**: Use the included `.gitignore` to manage version control effectively.
 ---
-### Contributions
+## Contributions
+
 Contributions are welcome. Please open an issue or submit a pull request if you have any suggestions, questions, or would like to contribute to the project.
 ---
 ### GNU General Public License
+
 This script is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 This script is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
