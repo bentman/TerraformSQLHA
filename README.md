@@ -26,11 +26,12 @@
    cd .\TerraformSQLHA
    ```
 2. **Set Up Environment Variables**: 
-   Copy `example_terraform.tfvars` to `terraform.tfvars`, edit to provide...
+   Copy `example_terraform.tfvars` to `terraform.tfvars`
    - `arm_tenant_id       = "YourTenantId"`  
    - `arm_subscription_id = "YourSubscriptionId"`  
    - `arm_client_id       = "YourServicePrincipalId"`  
    - `arm_client_secret   = "YourServicePrincipalSecret"`
+   NOTE: Remove comments (1st `/*` & 1st `'*/`)
 3. **Initialize Terraform**:
    ```powershell
    terraform init
