@@ -1,4 +1,4 @@
-/*# .\terraform.tfvars
+# .\terraform.tfvars
 #################### SECRETS ####################
 #####  Declare confidential variables here
 #####  Store secret values in *.tfvars file
@@ -13,7 +13,7 @@ arm_client_secret   = "YourServicePrincipalSecret" // azure service principal se
 enable_vm_jumpwin = false
 enable_vm_jumplin = false
 enable_vm_addc    = true
-enable_vm_sqlha   = true
+enable_vm_sql     = true
 
 #################### VALUES ####################
 ########## RESOURCE VALUES
@@ -22,16 +22,16 @@ regions      = ["westus", "eastus"] // defaults to '["westus", "eastus"]'
 shortregions = ["usw", "use"]       // defaults to '["usw", "use"]'
 labtags = {
   "source"      = "terraform"
-  "project"     = "learning"
-  "environment" = "lab"
+  "project"     = "learn-sqlha"
+  "environment" = "lab-sqlha"
 }
 
 ########## NETWORK VALUES
-address_spaces = ["10.1.0.0/24", "10.2.0.0/24"] // defaults to '["10.1.0.0/24", "10.2.0.0/24"]'
+address_spaces = ["10.1.0.0/24", "10.1.1.0/24"] // defaults to '["10.1.0.0/24", "10.1.1.0/24"]'
 
-########## VM SHUTDOWN VALUES
-vm_shutdown_hhmm = "0600" // defaults to "0600"
-vm_shutdown_tz   = "UTC"  // defaults to "Dateline Standard Time" (UTC)
+########## SHUTDOWN VALUES
+vm_shutdown_hhmm = "0600"                   // defaults to "0600"
+vm_shutdown_tz   = "Dateline Standard Time" // defaults to "Dateline Standard Time" (UTC)
 
 ########## VM JUMPBOX VALUES
 vm_jump_size        = "Standard_B2s_v2" // vm jump size 'Standard_B2s_v2'
@@ -66,7 +66,7 @@ sql_sysadmin_pswd = "P@ssword!234"    // sql sysadmin password ('P@ssword!234')
 sql_disk_data     = 90                // GB SQL Disk - Data
 sql_disk_logs     = 60                // GB SQL Disk - Logs
 sql_disk_temp     = 30                // GB SQL Disk - Temp
-*/
+
 #################### NOTES ####################
 # Instructions for generating a new Service Principal and Secret using PowerShell
 #
