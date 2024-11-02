@@ -19,7 +19,6 @@
 [CmdletBinding()]
 param (
     [Parameter(ValueFromPipeline = $true, Mandatory = $true)] [string]$domain_name,
-    [Parameter(ValueFromPipeline = $true, Mandatory = $true)] [string]$temp_admin_pswd,
     [Parameter(ValueFromPipeline = $true, Mandatory = $true)] [string]$sql_svc_acct_user,
     [Parameter(ValueFromPipeline = $true, Mandatory = $true)] [string]$sql_svc_acct_pswd
 )
@@ -32,7 +31,7 @@ $dn_path = ($split_domain | ForEach-Object { "DC=$_" }) -join ","
 if (!(Test-Path -Path 'C:\BUILD\Logs\')) { New-Item -Path 'C:\BUILD\Logs\' -ItemType Directory -Force }
 
 # Start logging
-Start-Transcript -Path 'C:\BUILD\Logs\transcript-Add_DomainAccounts.log' -Force
+Start-Transcript -Path 'C:\BUILD\Logs\transcript-Add_SqlDomainAccounts.log' -Force
 
 # Import the Active Directory module
 Import-Module ActiveDirectory
@@ -87,26 +86,6 @@ Set-ADUser -Identity 'sqlinstall' `
     -DisplayName 'SQL Install Account'
 
 Add-ADGroupMember -Identity "Domain Admins" -Members 'sqlinstall'
-
-# Define users to be added
-$users = @(
-    @{Name = "mando"; GivenName = "Din"; Surname = "Djarin"; Office = "Mandalore" },
-    @{Name = "luke"; GivenName = "Luke"; Surname = "Skywalker"; Office = "Tatooine" },
-    @{Name = "han"; GivenName = "Han"; Surname = "Solo"; Office = "Millennium Falcon" }
-)
-
-# Add users to the domain and assign them to the 'Domain Admins' group
-foreach ($user in $users) {
-    New-ADUser -Name $user.Name `
-        -UserPrincipalName "$($user.Name)@$domain_name" `
-        -SamAccountName $user.Name `
-        -GivenName $user.GivenName `
-        -Surname $user.Surname `
-        -Office $user.Office `
-        -AccountPassword (ConvertTo-SecureString "$temp_admin_pswd" -AsPlainText -Force) `
-        -Enabled $true -ChangePasswordAtLogon $true -PassThru -Verbose |
-    Add-ADGroupMember -Identity "Domain Admins" -Members $_ -Verbose
-}
 
 # Stop logging
 Stop-Transcript

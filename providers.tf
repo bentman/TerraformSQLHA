@@ -1,3 +1,4 @@
+# .\providers.tf
 #################### PROVIDERS ####################
 # Define the required providers and Terraform version
 terraform {
