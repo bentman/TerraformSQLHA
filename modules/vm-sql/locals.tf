@@ -7,8 +7,8 @@ locals {
   # a primary and secondary SQL server in each region.
   region_server_pairs = flatten([
     for r in var.shortregions : [
-      { region = r, index = 0 },  # Primary SQL server for the region
-      { region = r, index = 1 }   # Secondary SQL server for the region
+      { region = r, index = 0 }, # Primary SQL server for the region
+      { region = r, index = 1 }  # Secondary SQL server for the region
     ]
   ])
   # Generate locals for domain join parameters
