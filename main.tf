@@ -289,4 +289,7 @@ module "sql_ha" {
   sql_svc_acct_user    = var.sql_svc_acct_user
   sql_svc_acct_pswd    = var.sql_svc_acct_pswd
   tags                 = var.labtags
+  depends_on = [
+    module.vm_addc,
+  ]
 }
