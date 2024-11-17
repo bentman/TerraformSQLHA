@@ -104,14 +104,12 @@ To remove all created resources:
 
 ---
 
-## Contributions
+### Contributions
 
-Contributions are welcome. If you have suggestions, questions, or would like to contribute, please open an issue or submit a pull request.
+Contributions are welcome! Please open an issue or submit a pull request if you have suggestions or enhancements.
 
----
+### License
 
-## License
-
-This project is licensed under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html).
-
-This project is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+This script is distributed without any warranty; use at your own risk.
+This project is licensed under the GNU General Public License v3. 
+See [GNU GPL v3](https://www.gnu.org/licenses/gpl-3.0.html) for details.
