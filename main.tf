@@ -10,7 +10,6 @@ resource "azurerm_resource_group" "rg" {
 
 #################### V-NETWORK MODULE ####################
 # Create Virtual Networks and associated subnets across specified regions
-# Define Virtual Network (VNet) for each region
 resource "azurerm_virtual_network" "vnet" {
   count               = length(var.regions)
   name                = "${var.shortregions[count.index]}-vnet"
@@ -21,7 +20,21 @@ resource "azurerm_virtual_network" "vnet" {
   depends_on          = [azurerm_resource_group.rg]
 }
 
-# Define subnets within each VNet
+#################### VIRTUAL NETWORK PEERING ####################
+# Enable peering between VNets in different regions for cross-region traffic
+resource "azurerm_virtual_network_peering" "vnet_peering" {
+  for_each = local.vnet_peerings
+
+  name                         = each.value.name
+  resource_group_name          = azurerm_resource_group.rg[each.value.src_index].name
+  virtual_network_name         = azurerm_virtual_network.vnet[each.value.src_index].name
+  remote_virtual_network_id    = azurerm_virtual_network.vnet[each.value.dst_index].id
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+  depends_on                   = [azurerm_virtual_network.vnet]
+}
+
+#################### VIRTUAL NETWORK SUBNETS ####################
 # Gateway Subnet
 resource "azurerm_subnet" "snet_gw" {
   count                = length(var.regions)
@@ -83,7 +96,7 @@ resource "azurerm_subnet" "snet_pub" {
 }
 
 #################### NETWORK SECURITY GROUPS ####################
-# Create Network Security Groups (NSG) for controlling traffic to and from subnets
+# Create Network Security Groups (NSG) for controlling traffic to VMs
 resource "azurerm_network_security_group" "nsg" {
   count               = length(var.regions)
   name                = "${var.shortregions[count.index]}-nsg"
@@ -179,20 +192,6 @@ resource "azurerm_subnet_network_security_group_association" "snet_pub_nsg_assoc
   subnet_id                 = azurerm_subnet.snet_pub[count.index].id
   network_security_group_id = azurerm_network_security_group.nsg[count.index].id
   depends_on                = [azurerm_subnet_network_security_group_association.snet_end_nsg_assoc]
-}
-
-#################### VIRTUAL NETWORK PEERING ####################
-# Enable peering between VNets in different regions for cross-region traffic
-resource "azurerm_virtual_network_peering" "vnet_peering" {
-  for_each = local.vnet_peerings
-
-  name                         = each.value.name
-  resource_group_name          = azurerm_resource_group.rg[each.value.src_index].name
-  virtual_network_name         = azurerm_virtual_network.vnet[each.value.src_index].name
-  remote_virtual_network_id    = azurerm_virtual_network.vnet[each.value.dst_index].id
-  allow_virtual_network_access = true
-  allow_forwarded_traffic      = true
-  depends_on                   = [azurerm_virtual_network.vnet]
 }
 
 #################### VM JUMPWIN MODULE ####################
