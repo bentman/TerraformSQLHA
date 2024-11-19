@@ -1,5 +1,5 @@
 # .\terraform.tfvars
-/*#################### SECRETS ####################
+#################### SECRETS ####################
 #####  Declare confidential variables here
 #####  Store secret values in *.tfvars file
 #####  Check .gitignore in repo for details
@@ -66,7 +66,7 @@ sql_sysadmin_pswd = "P@ssword!234"    // sql sysadmin password ('P@ssword!234')
 sql_disk_data     = 90                // GB SQL Disk - Data
 sql_disk_logs     = 60                // GB SQL Disk - Logs
 sql_disk_temp     = 30                // GB SQL Disk - Temp
-*/
+
 #################### NOTES ####################
 # Instructions for generating a new Service Principal and Secret using PowerShell
 #
