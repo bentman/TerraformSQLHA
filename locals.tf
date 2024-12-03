@@ -17,8 +17,6 @@ locals {
   domain_dns_servers = [
     cidrhost(azurerm_subnet.snet_dc[0].address_prefixes[0], 5),
     cidrhost(azurerm_subnet.snet_dc[1].address_prefixes[0], 5),
-    "1.1.1.1",
-    "8.8.8.8"
   ]
   # Generate locals for domain join parameters
   split_domain    = split(".", var.domain_name)

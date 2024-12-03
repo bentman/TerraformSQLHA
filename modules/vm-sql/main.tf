@@ -74,7 +74,7 @@ resource "azurerm_storage_account" "sqlha_witness" {
 resource "azurerm_storage_container" "sqlha_quorum" {
   count                 = length(var.regions)
   name                  = lower("${var.shortregions[count.index]}sqlquorum")
-  storage_account_name  = azurerm_storage_account.sqlha_witness[count.index].name
+  storage_account_id    = azurerm_storage_account.sqlha_witness[count.index].id
   container_access_type = "private"
 }
 
