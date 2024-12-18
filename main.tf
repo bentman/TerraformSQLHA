@@ -280,7 +280,7 @@ module "sql_ha" {
   domain_admin_user    = var.domain_admin_user
   domain_admin_pswd    = var.domain_admin_pswd
   domain_dns_servers   = local.domain_dns_servers
-  addc_pip_address     = data.azurerm_public_ip.addc_public_ip.ip_address
+  addc_pip_address     = module.vm_addc[0].first_addc_public_ip
   sql_localadmin_user  = var.sql_localadmin_user
   sql_localadmin_pswd  = var.sql_localadmin_pswd
   sql_sysadmin_user    = var.sql_sysadmin_user

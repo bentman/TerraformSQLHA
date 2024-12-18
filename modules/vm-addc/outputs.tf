@@ -10,3 +10,21 @@ output "addc_public_ip_dns_map" {
     }
   }
 }
+
+output "first_addc_public_ip" {
+  value = azurerm_public_ip.addc_public_ip[0].ip_address
+
+  precondition {
+    condition     = length(azurerm_public_ip.addc_public_ip) > 0
+    error_message = "No public IP addresses have been created; ensure that 'azurerm_public_ip.addc_public_ip' has at least one instance."
+  }
+}
+
+output "second_addc_public_ip" {
+  value = azurerm_public_ip.addc_public_ip[1].ip_address
+
+  precondition {
+    condition     = length(azurerm_public_ip.addc_public_ip) > 1
+    error_message = "No public IP addresses have been created; ensure that 'azurerm_public_ip.addc_public_ip' has at least one instance."
+  }
+}
