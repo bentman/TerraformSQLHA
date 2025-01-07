@@ -61,3 +61,14 @@ output "vm_sql_ip_public_name" {
   description = "Map of SQL HA public IP addresses to their DNS hostnames from the sql_ha module"
   value       = length(module.sql_ha) > 0 ? module.sql_ha[0].sqlha_public_ip_dns_map : null
 }
+
+########## Module Summary 
+output "z_modules_summary" {
+  description = "Summary of enabled VM modules and their public IPs"
+  value = {
+    jumpwin = length(module.vm_jumpwin) > 0 ? module.vm_jumpwin[0].vm_jumpwin_public_ip : null,
+    jumplin = length(module.vm_jumplin) > 0 ? module.vm_jumplin[0].vm_jumplin_public_ip : null,
+    addc    = length(module.vm_addc) > 0 ? module.vm_addc[0].addc_public_ip_dns_map : null,
+    sql_ha  = length(module.sql_ha) > 0 ? module.sql_ha[0].sqlha_public_ip_dns_map : null
+  }
+}
