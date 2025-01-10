@@ -65,9 +65,6 @@ resource "azurerm_storage_account" "sqlha_witness" {
   https_traffic_only_enabled = true
   min_tls_version            = "TLS1_2"
   tags                       = var.tags
-  depends_on = [
-    azurerm_lb.sqlha_lb,
-  ]
 }
 
 # Blob container for cloud SQL quorum
@@ -126,6 +123,8 @@ resource "azurerm_windows_virtual_machine" "sqlha_vm" {
   size                = var.vm_sqlha_size
   admin_username      = var.sql_localadmin_user
   admin_password      = var.sql_localadmin_pswd
+  priority            = "Spot"       # Spot pricing
+  eviction_policy     = "Deallocate" # Choose "Delete" or "Deallocate"
   tags                = var.tags
   network_interface_ids = [
     azurerm_network_interface.sqlha_nic[each.key].id
@@ -207,6 +206,9 @@ resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_data_attach" {
   virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
   lun                = 0
   caching            = "ReadWrite"
+  depends_on = [
+    azurerm_managed_disk.sqlha_data,
+  ]
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_logs_attach" {
@@ -215,6 +217,9 @@ resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_logs_attach" {
   virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
   lun                = 1
   caching            = "ReadOnly"
+  depends_on = [
+    azurerm_managed_disk.sqlha_logs,
+  ]
 }
 
 # SQL Disk Attachments
@@ -224,6 +229,9 @@ resource "azurerm_virtual_machine_data_disk_attachment" "sqlha_temp_attach" {
   virtual_machine_id = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
   lun                = 2
   caching            = "None"
+  depends_on = [
+    azurerm_managed_disk.sqlha_temp,
+  ]
 }
 
 ########## INSTALL OPENSSH ON SQLHA VIRTUAL MACHINES ##########
@@ -231,18 +239,31 @@ resource "azurerm_virtual_machine_extension" "install_openssh_sql" {
   for_each                   = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
   name                       = "${each.value.region}-InstallOpenSSH-sqlha${each.value.index}"
   virtual_machine_id         = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
-  publisher                  = "Microsoft.Azure.OpenSSH"
-  type                       = "WindowsOpenSSH"
-  type_handler_version       = "3.0"
+  publisher                  = "Microsoft.Compute"
+  type                       = "CustomScriptExtension"
+  type_handler_version       = "1.10"
   auto_upgrade_minor_version = true
+  settings                   = <<SETTINGS
+  {
+    "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -NoProfile -Command \"
+    Install-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0;
+    Start-Service sshd;
+    Set-Service -Name sshd -StartupType Automatic;
+    New-NetFirewallRule -Name OpenSSH-Server-In-TCP -DisplayName 'OpenSSH Server (TCP)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22;
+    Restart-Service sshd\""
+  }
+  SETTINGS
   depends_on = [
     azurerm_windows_virtual_machine.sqlha_vm,
+    azurerm_virtual_machine_data_disk_attachment.sqlha_data_attach,
+    azurerm_virtual_machine_data_disk_attachment.sqlha_logs_attach,
+    azurerm_virtual_machine_data_disk_attachment.sqlha_temp_attach,
   ]
 }
 
 # Wait for sql ssh to settle
 resource "time_sleep" "install_openssh_sql_wait" {
-  create_duration = "2m"
+  create_duration = "3m"
   depends_on = [
     azurerm_virtual_machine_extension.install_openssh_sql,
   ]
@@ -529,5 +550,21 @@ resource "null_resource" "add_sqlsysadmins_exec" {
   }
   depends_on = [
     azurerm_mssql_virtual_machine.az_sqlha,
+  ]
+}
+
+# VM-SQL Autoshutdown with offset for secondary servers
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "vm_sql_shutdown" {
+  for_each              = { for pair in local.region_server_pairs : "${pair.region}-${pair.index}" => pair }
+  virtual_machine_id    = azurerm_windows_virtual_machine.sqlha_vm[each.key].id
+  location              = var.regions[index(var.shortregions, each.value.region)]
+  enabled               = true
+  daily_recurrence_time = each.value.index == 0 ? "0100" : "0045" # Secondary shuts down at 00:45, Primary at 01:00
+  timezone              = "Central Standard Time"
+  notification_settings {
+    enabled = false
+  }
+  depends_on = [
+    null_resource.add_sqlsysadmins_exec,
   ]
 }
